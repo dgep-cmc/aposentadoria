@@ -3043,7 +3043,7 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
               )}
 
               {/* PROSPECÇÃO DE FUTURO: IMPACTO DE CONTINUAR TRABALHANDO MAIS TEMPO */}
-              {(() => {
+              {sim.extensionMonths && sim.extensionMonths > 0 ? (() => {
                 const yearsTotal = proventosResults.yearsTotal || 0;
                 const mediaSalarialGeral = proventosResults.average || 0;
                 return (
@@ -3291,7 +3291,7 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                 </div>
               </div>
                 );
-              })()}
+              })() : null}
 
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm overflow-x-auto">
                 <h5 className="font-bold text-[#004b8d] text-sm uppercase mb-3 border-b border-gray-200 pb-2">Memória de Cálculo Analítica</h5>
