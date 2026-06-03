@@ -2086,9 +2086,7 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       const chosenGrat = Math.max(funcVal, carrGrat);
 
       const rawVal = base + techVal + atsVal + stimVal + chosenGrat;
-      const caps = getSavedSalaryCaps();
-      const cap = (sim.selectedCareer === 'procurador_juridico' ? caps.procurador : caps.general);
-      return Math.min(rawVal, cap);
+      return rawVal;
     };
 
     if (activeRule && activeRule.aplicavel && activeRule.data) {
@@ -2198,10 +2196,14 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     }
 
     projFutureMonths.forEach((item, fIdx) => {
+      const caps = getSavedSalaryCaps();
+      const cap = (sim.selectedCareer === 'procurador_juridico' ? caps.procurador : caps.general);
+      const cappedVal = Math.min(item.originalValue, cap);
+
       candidateMonths.push({
         competencia: item.competencia,
         originalValue: item.originalValue,
-        value: item.value,
+        value: cappedVal,
         type: item.type,
         rowId: 'proj-fut',
         rowIdx: 1000 + fIdx
@@ -2483,10 +2485,14 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     });
 
     projFutureMonths.forEach((item) => {
+      const caps = getSavedSalaryCaps();
+      const cap = (sim.selectedCareer === 'procurador_juridico' ? caps.procurador : caps.general);
+      const cappedVal = Math.min(item.originalValue, cap);
+
       allMonthlyDetails.push({
         competencia: item.competencia,
         originalValue: item.originalValue,
-        value: item.value,
+        value: cappedVal,
         type: item.type,
         isPre94: false,
         isExcluded: false
@@ -2526,9 +2532,23 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       if (item.isPre94) {
         analyticalListStr += `   ${compLabel} | ${descLabel} | (Período anterior a 07/1994 desconsiderado do cálculo da média)\n`;
       } else {
-        const origValStr = `Orig: R$ ${formatCurrency(item.originalValue)}`;
-        const corrValStr = sim.needsUpdate ? `Corr: R$ ${formatCurrency(item.value)}` : "";
-        const valBlock = `${origValStr.padEnd(18)} ${corrValStr ? '| ' + corrValStr.padEnd(18) : ''}`;
+        let valBlock = "";
+        if (item.type === 'projected-future') {
+          const caps = getSavedSalaryCaps();
+          const cap = (sim.selectedCareer === 'procurador_juridico' ? caps.procurador : caps.general);
+          
+          const origValStr = `Orig: R$ ${formatCurrency(item.originalValue)}`;
+          if (item.originalValue > cap) {
+            const diff = item.originalValue - cap;
+            valBlock = `${origValStr.padEnd(18)} | Teto: R$ ${formatCurrency(cap)} (Acima do teto R$ ${formatCurrency(diff)})`;
+          } else {
+            valBlock = `${origValStr.padEnd(18)}`;
+          }
+        } else {
+          const origValStr = `Orig: R$ ${formatCurrency(item.originalValue)}`;
+          const corrValStr = sim.needsUpdate ? `Corr: R$ ${formatCurrency(item.value)}` : "";
+          valBlock = `${origValStr.padEnd(18)} ${corrValStr ? '| ' + corrValStr.padEnd(18) : ''}`;
+        }
         
         let annotation = "";
         if (item.isExcluded) {

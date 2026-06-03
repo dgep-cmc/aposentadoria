@@ -811,12 +811,25 @@ export function exportToExcel(
     addRow(['Competência', 'Descrição da Contribuição', 'Indicativo Pré-94', 'Valor de Contribuição Original (R$)', 'Valor Corrigido por Fatores (R$)', 'Otimização (§10) Status Descarte']);
     
     proventosResults.allContributions.forEach((item: any) => {
+      let desc = 'Contrição Averbação Externa';
+      if (item.type === 'chamber-historical') desc = 'Câmara Curitiba (Histórico)';
+      else if (item.type === 'chamber-projected' || item.type === 'chamber-proj') desc = 'Câmara Curitiba (Previsão)';
+      else if (item.type === 'projected-future') desc = 'Período Futuro Projetado';
+      else if (item.type === 'contribution-only') desc = 'Incorporação (Tempo e Contrib.)';
+      else if (item.type === 'all-effects') desc = 'Incorporação (Todos Efeitos)';
+      else if (item.type === 'pre-1994') desc = 'Incorporação (Tempo Pré-1994)';
+      
+      let corrValStr = item.isPre94 ? '0,00' : formatCurrency(item.value);
+      if (item.type === 'projected-future') {
+        corrValStr = 'Não aplicável (Futuro)';
+      }
+
       addRow([
         item.competencia,
-        item.type === 'chamber-historical' ? 'Câmara Curitiba (Histórico)' : item.type === 'chamber-projected' ? 'Câmara Curitiba (Previsão)' : 'Contrição Averbação Externa',
+        desc,
         item.isPre94 ? 'SIM (Desconsiderada pós-94)' : 'NÃO',
         formatCurrency(item.originalValue),
-        item.isPre94 ? '0,00' : formatCurrency(item.value),
+        corrValStr,
         item.isExcluded ? 'CONSELHO DESCARTE ATIVADO' : (item.isPre94 ? 'Menor Pré-1994' : 'CONTABILIZADA NA SOMA')
       ]);
     });
