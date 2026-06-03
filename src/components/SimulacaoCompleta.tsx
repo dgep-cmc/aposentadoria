@@ -481,6 +481,15 @@ function StepCarreira({ sim, updateSim }: { sim: UnifiedSimulation, updateSim: a
 }
 
 function StepGratificacoes({ sim, updateSim }: { sim: UnifiedSimulation, updateSim: any }) {
+  let isEligible = true;
+  if (sim.ingressoCmc) {
+    const entryDate = new Date(sim.ingressoCmc + 'T00:00:00');
+    const limitDate = new Date('2003-12-31T00:00:00');
+    if (entryDate > limitDate) {
+      isEligible = false;
+    }
+  }
+
   const addStimulusRow = () => {
     updateSim('stimulusRows', [...sim.stimulusRows, { tipo: 'graduacao', start: '', end: '' }]);
   };
@@ -514,6 +523,21 @@ function StepGratificacoes({ sim, updateSim }: { sim: UnifiedSimulation, updateS
       <h2 className="text-sm font-bold text-[#004b8d] border-l-4 border-[#004b8d] pl-2.5 uppercase tracking-wider">
         Gratificações e Adicionais
       </h2>
+
+      {!isEligible && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-800 text-sm">
+          <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <strong className="block font-bold">Servidor Inelegível para Gratificação Especial (GE)</strong>
+            <p className="text-xs text-amber-700 mt-1">
+              Data de ingresso no serviço público ({sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00').toLocaleDateString('pt-BR') : 'não informada'}) é superior a 31/12/2003. Conforme regulamento, apenas servidores admitidos até esta data possuem direito à incorporação de Gratificação Especial. Os valores inseridos abaixo serão demonstrados como zero no cálculo final.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Data da Última Concessão de ATS</label>
@@ -1656,6 +1680,16 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     const databaseFGs = getSavedFGValues();
     const careers = getSavedCareerData();
     const baseSalary = careers[sim.selectedCareer]?.[sim.selectedLevel] || 0;
+
+    let isEligible = true;
+    if (sim.ingressoCmc) {
+      const entryDate = new Date(sim.ingressoCmc + 'T00:00:00');
+      const limitDate = new Date('2003-12-31T00:00:00');
+      if (entryDate > limitDate) {
+        isEligible = false;
+      }
+    }
+
     const diffM = (sStr: string, eStr: string) => {
       if (!sStr) return 0;
       const d1 = new Date(sStr + 'T12:00:00'); 
@@ -1669,17 +1703,24 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       return Math.max(0, m);
     };
     const fgs = sim.fgRows.map(row => {
-      const meses = diffM(row.start, row.end);
+      const meses = isEligible ? diffM(row.start, row.end) : 0;
       const valRef = databaseFGs[row.nivel as keyof typeof databaseFGs] || 0;
-      return { ...row, meses, valRef, inc: (valRef * meses) / 240 };
+      return { ...row, meses, valRef, inc: isEligible ? (valRef * meses) / 240 : 0 };
     });
     const stims = sim.stimulusRows.map(row => {
-      const meses = diffM(row.start, row.end);
+      const meses = isEligible ? diffM(row.start, row.end) : 0;
       const perc = stimulusPercentages[row.tipo as keyof typeof stimulusPercentages] || 0;
-      const inc = (baseSalary * perc * meses) / 240;
+      const inc = isEligible ? (baseSalary * perc * meses) / 240 : 0;
       return { ...row, meses, perc, inc };
     });
-    return { baseSalary, fgs, stims, totalFGs: fgs.reduce((a, b) => a + b.inc, 0), totalStims: stims.reduce((a, b) => a + b.inc, 0) };
+    return { 
+      baseSalary, 
+      fgs, 
+      stims, 
+      totalFGs: isEligible ? fgs.reduce((a, b) => a + b.inc, 0) : 0, 
+      totalStims: isEligible ? stims.reduce((a, b) => a + b.inc, 0) : 0,
+      isEligible
+    };
   }, [sim]);
 
   // --- FUNÇÃO CENTRALIZADA DE CÁLCULO DE CENÁRIO ---
@@ -2863,6 +2904,13 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
           {opts.ge && (
             <div className="space-y-4">
               <h4 className="text-lg font-bold text-[#004b8d] border-l-4 border-[#004b8d] pl-2 uppercase tracking-wider">2. Gratificação Especial (GE)</h4>
+              
+              {!geResults.isEligible && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-4 rounded-xl leading-relaxed">
+                  <strong>Servidor Inelegível para Incorporação de Gratificação Especial (GE):</strong> O ingresso no serviço público ocorreu em {sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00').toLocaleDateString('pt-BR') : 'data não informada'} (limite para este direito: ingresso até 31/12/2003). Por este motivo, as eventuais funções e adicionais informados foram desconsiderados e fixados com valor proporcional zerado no cálculo geral de benefício.
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                   <h5 className="font-bold text-[#004b8d] text-sm uppercase">Acúmulo de FGs Adicionais</h5>
@@ -3349,7 +3397,10 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       <div className="space-y-2 bg-gray-50 border border-gray-200 p-4 rounded-xl shadow-xs">
         <label className="flex items-center gap-2 text-sm font-bold cursor-pointer hover:bg-gray-100 p-2 rounded transition-all"><input type="checkbox" checked={opts.regras} onChange={(e) => setOpts(p => ({...p, regras: e.target.checked}))} className="w-4 h-4 text-[#004b8d]" />Regras de Aposentadoria e Elegibilidade</label>
         <label className="flex items-center gap-2 text-sm font-bold cursor-pointer hover:bg-gray-100 p-2 rounded transition-all"><input type="checkbox" checked={opts.proventos} onChange={(e) => setOpts(p => ({...p, proventos: e.target.checked}))} className="w-4 h-4 text-[#004b8d]" />Simulação de Proventos e Salário de Benefício</label>
-        <label className="flex items-center gap-2 text-sm font-bold cursor-pointer hover:bg-gray-100 p-2 rounded transition-all"><input type="checkbox" checked={opts.ge} onChange={(e) => setOpts(p => ({...p, ge: e.target.checked}))} className="w-4 h-4 text-[#004b8d]" />Gratificação Especial (GE)</label>
+        <label className={`flex items-center gap-2 text-sm font-bold cursor-pointer hover:bg-gray-100 p-2 rounded transition-all ${!geResults.isEligible ? 'opacity-60' : ''}`}>
+          <input type="checkbox" checked={opts.ge} onChange={(e) => setOpts(p => ({...p, ge: e.target.checked}))} className="w-4 h-4 text-[#004b8d]" />
+          Gratificação Especial (GE) {!geResults.isEligible && <span className="text-xs text-amber-600 font-semibold uppercase ml-1">(! Inelegível - Ingresso pós-2003)</span>}
+        </label>
       </div>
 
       <div className="pt-4 flex flex-col sm:flex-row gap-4">
