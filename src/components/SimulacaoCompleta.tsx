@@ -1957,20 +1957,29 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       let funcVal = 0;
       const databaseFGs = getSavedFGValues();
       sim.fgRows.forEach(row => {
-        if (row.start && row.end && row.nivel) {
+        if (row.start && row.nivel) {
           const startParts = row.start.split('-');
-          const endParts = row.end.split('-');
-          if (startParts.length >= 2 && endParts.length >= 2) {
+          if (startParts.length >= 2) {
             const sY = parseInt(startParts[0], 10);
             const sM = parseInt(startParts[1], 10);
-            const eY = parseInt(endParts[0], 10);
-            const eM = parseInt(endParts[1], 10);
             
             const isAfterStart = (yearInt > sY) || (yearInt === sY && monthInt >= sM);
-            const isBeforeEnd = (yearInt < eY) || (yearInt === eY && monthInt <= eM);
+            
+            let isBeforeEnd = true;
+            if (row.end && row.end.trim() !== '') {
+              const endParts = row.end.split('-');
+              if (endParts.length >= 2) {
+                const eY = parseInt(endParts[0], 10);
+                const eM = parseInt(endParts[1], 10);
+                isBeforeEnd = (yearInt < eY) || (yearInt === eY && monthInt <= eM);
+              }
+            }
             
             if (isAfterStart && isBeforeEnd) {
-              funcVal = databaseFGs[row.nivel as keyof typeof databaseFGs] || 0;
+              const val = databaseFGs[row.nivel as keyof typeof databaseFGs] || 0;
+              if (val > funcVal) {
+                funcVal = val;
+              }
             }
           }
         }
