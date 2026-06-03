@@ -1895,6 +1895,92 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     let projEndComp = '';
     const projSalary = geResults ? geResults.baseSalary : 0;
 
+    // Helper calculate component salary values for each projected month
+    const calculateFullProjectedValue = (base: number, projDate: Date) => {
+      // 1. Technical Responsibility (30%)
+      const techVal = base * 0.30;
+
+      // 2. ATS (Adicional por Tempo de Serviço)
+      const yearInt = projDate.getFullYear();
+      const monthInt = projDate.getMonth() + 1;
+      const targetDate = new Date(yearInt, monthInt - 1, 1);
+      
+      let initialAtsNum = sim.lastAtsNumber ?? 0;
+      let atsPercent = 0;
+      let baseDateStr = sim.lastAtsConcession || sim.ingressoCmc || '';
+      
+      if (baseDateStr) {
+        const baseDate = new Date(baseDateStr + 'T00:00:00');
+        if (!isNaN(baseDate.getTime())) {
+          let diffYears = targetDate.getFullYear() - baseDate.getFullYear();
+          let diffMonths = targetDate.getMonth() - baseDate.getMonth();
+          let totalMonths = diffYears * 12 + diffMonths;
+          let additionalAts = Math.floor(totalMonths / 60);
+          if (additionalAts < 0) additionalAts = 0;
+          const finalAts = Math.min(10, initialAtsNum + additionalAts);
+          atsPercent = ATS_PERCENTAGES[finalAts] ?? 0;
+        } else {
+          atsPercent = ATS_PERCENTAGES[initialAtsNum] ?? 0;
+        }
+      } else {
+        atsPercent = ATS_PERCENTAGES[initialAtsNum] ?? 0;
+      }
+      const atsVal = base * atsPercent;
+
+      // 3. Academic Stimulus
+      let activeGrad = 0;
+      let activeNonGrad = 0;
+      
+      sim.stimulusRows.forEach(row => {
+        if (row.start && row.tipo) {
+          const startParts = row.start.split('-');
+          if (startParts.length >= 2) {
+            const sY = parseInt(startParts[0], 10);
+            const sM = parseInt(startParts[1], 10);
+            const hasStarted = (yearInt > sY) || (yearInt === sY && monthInt >= sM);
+            if (hasStarted) {
+              if (row.tipo === 'graduacao') {
+                activeGrad = 0.30;
+              } else {
+                const perc = stimulusPercentages[row.tipo as keyof typeof stimulusPercentages] || 0;
+                if (perc > activeNonGrad) {
+                  activeNonGrad = perc;
+                }
+              }
+            }
+          }
+        }
+      });
+      const stimVal = base * (activeGrad + activeNonGrad);
+
+      // 4. FG / Function / Special Career Gratifications
+      let funcVal = 0;
+      const databaseFGs = getSavedFGValues();
+      sim.fgRows.forEach(row => {
+        if (row.start && row.end && row.nivel) {
+          const startParts = row.start.split('-');
+          const endParts = row.end.split('-');
+          if (startParts.length >= 2 && endParts.length >= 2) {
+            const sY = parseInt(startParts[0], 10);
+            const sM = parseInt(startParts[1], 10);
+            const eY = parseInt(endParts[0], 10);
+            const eM = parseInt(endParts[1], 10);
+            
+            const isAfterStart = (yearInt > sY) || (yearInt === sY && monthInt >= sM);
+            const isBeforeEnd = (yearInt < eY) || (yearInt === eY && monthInt <= eM);
+            
+            if (isAfterStart && isBeforeEnd) {
+              funcVal = databaseFGs[row.nivel as keyof typeof databaseFGs] || 0;
+            }
+          }
+        }
+      });
+      const carrGrat = (sim.selectedCareer === 'procurador_juridico') ? base * 0.60 : (sim.selectedCareer === 'contador' ? base * 0.75 : 0);
+      const chosenGrat = Math.max(funcVal, carrGrat);
+
+      return base + techVal + atsVal + stimVal + chosenGrat;
+    };
+
     if (activeRule && activeRule.aplicavel && activeRule.data) {
       let maxHistDate = new Date();
       if (post94_Hist.length > 0) {
@@ -1929,10 +2015,11 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
         if (projectedMonthsCount === 0) projStartComp = comp;
         projEndComp = comp;
         
+        const fullFutureVal = calculateFullProjectedValue(projSalary, currentProjDate);
         projFutureMonths.push({
           competencia: comp,
-          originalValue: projSalary,
-          value: projSalary,
+          originalValue: fullFutureVal,
+          value: fullFutureVal,
           type: 'projected-future',
           isPre94: false,
           isExcluded: false
@@ -1972,10 +2059,11 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
         if (projectedMonthsCount === 0) projStartComp = comp;
         projEndComp = comp;
         
+        const fullFutureVal = calculateFullProjectedValue(projSalary, currentProjDate);
         projFutureMonths.push({
           competencia: comp,
-          originalValue: projSalary,
-          value: projSalary,
+          originalValue: fullFutureVal,
+          value: fullFutureVal,
           type: 'projected-future',
           isPre94: false,
           isExcluded: false
