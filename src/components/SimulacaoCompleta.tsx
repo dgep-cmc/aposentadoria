@@ -1565,13 +1565,105 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
   };
 
   // --- GE (Estático do Servidor) ---
+  const getRetirementDate = (sim: any) => {
+    if (!sim.ingressoCmc || !sim.ingressoCargoAtual || !sim.dataNascimento) {
+      return new Date();
+    }
+    const calculatedDiasINSS = (sim.incorporacoes || []).reduce((acc: number, inc: any) => {
+      if (inc.tipo === 'contribution-only' || inc.tipo === 'pre-1994') {
+        if (inc.useDates && inc.dataInicio && inc.dataFim) {
+          const d1 = new Date(inc.dataInicio + 'T12:00:00');
+          const d2 = new Date(inc.dataFim + 'T12:00:00');
+          if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+            const rpps = calcularTempoRPPS(d1, d2);
+            return acc + (rpps.years * 365) + (rpps.months * 30) + rpps.days;
+          }
+        }
+        return acc + (inc.years * 365) + (inc.months * 30) + inc.days;
+      }
+      return acc;
+    }, 0);
+
+    const calculatedDiasSP = (sim.incorporacoes || []).reduce((acc: number, inc: any) => {
+      if (inc.tipo === 'all-effects') {
+        if (inc.useDates && inc.dataInicio && inc.dataFim) {
+          const d1 = new Date(inc.dataInicio + 'T12:00:00');
+          const d2 = new Date(inc.dataFim + 'T12:00:00');
+          if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+            const rpps = calcularTempoRPPS(d1, d2);
+            return acc + (rpps.years * 365) + (rpps.months * 30) + rpps.days;
+          }
+        }
+        return acc + (inc.years * 365) + (inc.months * 30) + inc.days;
+      }
+      return acc;
+    }, 0);
+
+    const REGRAS_DEF = [
+      { nome: "Regra Geral (Art. 6º)", checker: (s: any, p: any, id: number) => id >= (s.sexo === 'M' ? 65 : 62) && p.contrib >= 25 * 360 && p.sp >= 10 * 360 && p.cargo >= 5 * 360 },
+      { nome: "Pedágio 100% (Art. 11)", checker: (s: any, p: any, id: number) => {
+        if (s.dataIngressoSP > new Date(2022, 0, 1)) return false;
+        const minC = (s.sexo === 'M' ? 35 : 30) * 360;
+        const pedagio = Math.max(0, minC - s.tempoEm2022);
+        return id >= (s.sexo === 'M' ? 60 : 57) && p.contrib >= (minC + pedagio) && p.sp >= 20 * 360 && p.cargo >= 5 * 360;
+      }},
+      { nome: "Regra de Pontos (Art. 10)", checker: (s: any, p: any, id: number) => {
+        if (s.dataIngressoSP > new Date(2021, 11, 31)) return false;
+        const minId = s.dataIngressoSP <= new Date(2003, 11, 31) ? (s.sexo === 'M' ? 65 : 62) : (s.sexo === 'M' ? 62 : 57);
+        const minC = (s.sexo === 'M' ? 35 : 30) * 360;
+        const ptsBase = s.sexo === 'M' ? 98 : 88;
+        const ptsExig = Math.min(s.sexo === 'M' ? 105 : 100, ptsBase + Math.max(0, p.data.getFullYear() - 2022));
+        const ptsAtuais = (diffEmDias(s.dataNasc, p.data) / 365.25) + (p.contrib / 360);
+        return id >= minId && p.contrib >= minC && p.sp >= 20 * 360 && p.cargo >= 5 * 360 && ptsAtuais >= ptsExig;
+      }}
+    ];
+
+    const s = {
+      dataNasc: new Date(sim.dataNascimento + 'T00:00:00'),
+      sexo: sim.sexo,
+      dataIngressoSP: new Date(sim.ingressoCmc + 'T00:00:00'),
+      dataIngressoCargo: new Date(sim.ingressoCargoAtual + 'T00:00:00'),
+      averbRgps: calculatedDiasINSS, averbSp: calculatedDiasSP, afastamentos: sim.diasAfastamento || 0
+    };
+    const inicioProjecao = new Date(Math.max(s.dataIngressoSP.getTime(), s.dataIngressoCargo.getTime(), new Date(2022, 0, 1).getTime()));
+    const tempoEm2022 = diffEmDias(s.dataIngressoSP, new Date(2022, 0, 1)) + s.averbRgps + s.averbSp - s.afastamentos;
+    const serverObj = { ...s, inicioProjecao, tempoEm2022 };
+    
+    const regrasResults = REGRAS_DEF.map((regra: any) => {
+      const proj = { data: new Date(inicioProjecao), contrib: diffEmDias(serverObj.dataIngressoSP, inicioProjecao) + serverObj.averbRgps + serverObj.averbSp - serverObj.afastamentos, sp: diffEmDias(serverObj.dataIngressoSP, inicioProjecao) + serverObj.averbSp - serverObj.afastamentos, cargo: diffEmDias(serverObj.dataIngressoCargo, inicioProjecao) - serverObj.afastamentos };
+      for (let i = 0; i < 18250; i++) {
+        if (i > 0) { proj.data.setDate(proj.data.getDate() + 1); proj.contrib++; proj.sp++; if (proj.data >= serverObj.dataIngressoCargo) proj.cargo++; }
+        const idade = calcularIdade(serverObj.dataNasc, proj.data);
+        if (idade >= 75) return { nome: regra.nome, aplicavel: false };
+        if (regra.checker(serverObj, proj, idade)) return { nome: regra.nome, aplicavel: true, data: new Date(proj.data) };
+      }
+      return { nome: regra.nome, aplicavel: false };
+    });
+
+    const aplicaveis = regrasResults.filter(r => r.aplicavel);
+    let activeRule = null;
+    if (aplicaveis.length > 0) {
+      activeRule = aplicaveis.sort((a, b) => (a.data?.getTime() || 0) - (b.data?.getTime() || 0))[0];
+    }
+    const endDate = (activeRule && activeRule.data) ? new Date(activeRule.data) : new Date();
+    if (sim.extensionMonths && sim.extensionMonths > 0) {
+      endDate.setMonth(endDate.getMonth() + sim.extensionMonths);
+    }
+    return endDate;
+  };
+
   const geResults = React.useMemo(() => {
     const databaseFGs = getSavedFGValues();
     const careers = getSavedCareerData();
     const baseSalary = careers[sim.selectedCareer]?.[sim.selectedLevel] || 0;
     const diffM = (sStr: string, eStr: string) => {
-      if (!sStr || !eStr) return 0;
-      const d1 = new Date(sStr); const d2 = new Date(eStr);
+      if (!sStr) return 0;
+      const d1 = new Date(sStr + 'T12:00:00'); 
+      const retirementDate = getRetirementDate(sim);
+      let d2 = eStr ? new Date(eStr + 'T12:00:00') : retirementDate;
+      if (isNaN(d2.getTime())) d2 = retirementDate;
+      if (d2 > retirementDate) d2 = retirementDate;
+      
       let m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
       if (d2.getDate() < d1.getDate()) m--;
       return Math.max(0, m);
@@ -1895,6 +1987,12 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     let projEndComp = '';
     const projSalary = geResults ? geResults.baseSalary : 0;
 
+    const careers = getSavedCareerData();
+    const levelNames = [
+      'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX', 'XXI', 'XXII', 'XXIII', 'XXIV', 'XXV', 'XXVI', 'XXVII', 'XXVIII', 'XXIX', 'XXX', 'XXXI', 'XXXII', 'XXXIII', 'XXXIV', 'XXXV', 'XXXVI'
+    ];
+    const initialBandIdx = levelNames.indexOf(sim.selectedLevel || 'I');
+
     // Helper calculate component salary values for each projected month
     const calculateFullProjectedValue = (base: number, projDate: Date) => {
       // 1. Technical Responsibility (30%)
@@ -2014,9 +2112,13 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       let currentProjDate = new Date(maxHistDate);
       currentProjDate.setMonth(currentProjDate.getMonth() + 1);
       
+      let currentBandIdx = initialBandIdx;
       let safetyCounter = 0;
       while (currentProjDate <= targetEndDate && safetyCounter < 500) {
         safetyCounter++;
+        if (currentProjDate.getMonth() === 9 && currentBandIdx < 35) {
+          currentBandIdx++;
+        }
         const m = String(currentProjDate.getMonth() + 1).padStart(2, '0');
         const y = currentProjDate.getFullYear();
         const comp = `${m}/${y}`;
@@ -2024,7 +2126,10 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
         if (projectedMonthsCount === 0) projStartComp = comp;
         projEndComp = comp;
         
-        const fullFutureVal = calculateFullProjectedValue(projSalary, currentProjDate);
+        const currentLevelName = levelNames[currentBandIdx] || 'I';
+        const dynamicBaseSalary = careers[sim.selectedCareer]?.[currentLevelName] || 0;
+        
+        const fullFutureVal = calculateFullProjectedValue(dynamicBaseSalary, currentProjDate);
         projFutureMonths.push({
           competencia: comp,
           originalValue: fullFutureVal,
@@ -2058,9 +2163,13 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       let currentProjDate = new Date(maxHistDate);
       currentProjDate.setMonth(currentProjDate.getMonth() + 1);
       
+      let currentBandIdx = initialBandIdx;
       let safetyCounter = 0;
       while (currentProjDate <= targetEndDate && safetyCounter < 500) {
         safetyCounter++;
+        if (currentProjDate.getMonth() === 9 && currentBandIdx < 35) {
+          currentBandIdx++;
+        }
         const m = String(currentProjDate.getMonth() + 1).padStart(2, '0');
         const y = currentProjDate.getFullYear();
         const comp = `${m}/${y}`;
@@ -2068,7 +2177,10 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
         if (projectedMonthsCount === 0) projStartComp = comp;
         projEndComp = comp;
         
-        const fullFutureVal = calculateFullProjectedValue(projSalary, currentProjDate);
+        const currentLevelName = levelNames[currentBandIdx] || 'I';
+        const dynamicBaseSalary = careers[sim.selectedCareer]?.[currentLevelName] || 0;
+        
+        const fullFutureVal = calculateFullProjectedValue(dynamicBaseSalary, currentProjDate);
         projFutureMonths.push({
           competencia: comp,
           originalValue: fullFutureVal,
