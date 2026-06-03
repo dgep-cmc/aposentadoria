@@ -64,15 +64,15 @@ export function onAuthStateChanged(authInstance: any, callback: (user: any | nul
   if (isFirebaseConfigured && authInstance) {
     return fbOnAuthStateChanged(authInstance, callback);
   } else {
-    // Local Offline Fallback: Auto-login master developer Diego Martins
-    const mockUser = {
-      uid: 'local-dev-user',
-      email: 'diegofmartins@gmail.com',
-      displayName: 'Diego Martins (Modo Offline)',
-      emailVerified: true,
-      isAnonymous: false,
-      providerData: []
-    };
+    // Local Offline Fallback: Retrieve session-persisted mock user to prevent auto-login
+    let mockUser: any = null;
+    try {
+      const savedUserJson = sessionStorage.getItem('dgep_offline_user');
+      mockUser = savedUserJson ? JSON.parse(savedUserJson) : null;
+    } catch (e) {
+      console.error('Error parsing session offline user:', e);
+    }
+    
     const timer = setTimeout(() => {
       callback(mockUser);
     }, 50);
@@ -166,15 +166,40 @@ export async function loginWithGoogle(): Promise<any> {
       throw error;
     }
   } else {
-    // Return mock logged-in user in offline mode
-    return {
-      uid: 'local-dev-user',
-      email: 'diegofmartins@gmail.com',
-      displayName: 'Diego Martins (Modo Offline)',
+    // In offline/local mode, ask the user to enter their email to simulate login rather than auto-logging in
+    const email = prompt("Modo Offline / Local:\nPor favor, informe seu e-mail cadastrado para prosseguir:");
+    if (!email || email.trim() === "") {
+      throw new Error("Login cancelado ou e-mail inválido.");
+    }
+    
+    const normalizedEmail = email.trim().toLowerCase();
+    const displayName = normalizedEmail === 'diegofmartins@gmail.com' 
+      ? 'Diego Martins (Modo Offline)' 
+      : normalizedEmail === 'rh@cmc.pr.gov.br'
+        ? 'Recursos Humanos CMC (Modo Offline)'
+        : normalizedEmail.split('@')[0];
+        
+    const mockUser = {
+      uid: 'local-dev-' + normalizedEmail.replace(/[^a-zA-Z0-9]/g, '-'),
+      email: normalizedEmail,
+      displayName: displayName,
       emailVerified: true,
       isAnonymous: false,
       providerData: []
     };
+    
+    try {
+      sessionStorage.setItem('dgep_offline_user', JSON.stringify(mockUser));
+    } catch (e) {
+      console.error('Error saving session offline user:', e);
+    }
+    
+    // Force a minor delay and window reload to trigger reactivity cleanly across state tree
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+    
+    return mockUser;
   }
 }
 
@@ -187,7 +212,15 @@ export async function logoutUser(): Promise<void> {
       throw error;
     }
   } else {
+    try {
+      sessionStorage.removeItem('dgep_offline_user');
+    } catch (e) {
+      console.error('Error clearing session offline user:', e);
+    }
     console.log('User signed out from Offline Mode.');
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   }
 }
 
