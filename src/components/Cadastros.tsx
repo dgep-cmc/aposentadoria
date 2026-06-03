@@ -28,14 +28,18 @@ import {
   getSavedCareerData, 
   getSavedFGValues, 
   getSavedFatoresINSS,
+  getSavedSalaryCaps,
   saveCareerData, 
   saveFGValues, 
   saveFatoresINSS,
+  saveSalaryCaps,
   resetSettingsToDefaults,
   CareerDataType,
   FGValuesType,
   FatoresINSSData,
-  defaultFatoresINSS
+  defaultFatoresINSS,
+  SalaryCapType,
+  defaultSalaryCap
 } from '../utils/settingsStore';
 import { 
   auth, 
@@ -47,8 +51,8 @@ import {
 } from '../utils/firebase';
 
 export default function Cadastros() {
-  // Tabs in order: 'users' | 'fatores' | 'careers' | 'fgs'
-  const [activeTab, setActiveTab] = useState<'users' | 'fatores' | 'careers' | 'fgs'>('users');
+  // Tabs in order: 'users' | 'fatores' | 'careers' | 'fgs' | 'salaryCaps'
+  const [activeTab, setActiveTab] = useState<'users' | 'fatores' | 'careers' | 'fgs' | 'salaryCaps'>('users');
   
   // Selected career for career editing
   const [selectedCareer, setSelectedCareer] = useState<string>('assistente_administrativo');
@@ -122,6 +126,20 @@ export default function Cadastros() {
     }
   }, [fatoresINSS.referenceMonthYear]);
 
+  const [salaryCaps, setSalaryCaps] = useState<SalaryCapType>(() => {
+    const loaded = getSavedSalaryCaps();
+    const draft = localStorage.getItem('dgep_draft_salary_caps');
+    if (draft) {
+      try {
+        const parsed = JSON.parse(draft);
+        if (parsed && typeof parsed === 'object' && parsed.general > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return loaded;
+  });
+
   // Base persistent states to compare with (isDirty checks)
   const [pristineCareersData, setPristineCareersData] = useState<CareerDataType>(() => {
     return JSON.parse(JSON.stringify(getSavedCareerData()));
@@ -131,6 +149,9 @@ export default function Cadastros() {
   });
   const [pristineFatoresINSS, setPristineFatoresINSS] = useState<FatoresINSSData>(() => {
     return JSON.parse(JSON.stringify(getSavedFatoresINSS()));
+  });
+  const [pristineSalaryCaps, setPristineSalaryCaps] = useState<SalaryCapType>(() => {
+    return JSON.parse(JSON.stringify(getSavedSalaryCaps()));
   });
 
   // Action status messages
@@ -197,6 +218,12 @@ export default function Cadastros() {
   }, [fatoresINSS]);
 
   useEffect(() => {
+    if (salaryCaps.general > 0) {
+      localStorage.setItem('dgep_draft_salary_caps', JSON.stringify(salaryCaps));
+    }
+  }, [salaryCaps]);
+
+  useEffect(() => {
     localStorage.setItem('dgep_draft_cadastros_tab', activeTab);
   }, [activeTab]);
 
@@ -212,7 +239,8 @@ export default function Cadastros() {
   const isCareersDirty = JSON.stringify(careersData) !== JSON.stringify(pristineCareersData);
   const isFGSDirty = JSON.stringify(fgValues) !== JSON.stringify(pristineFgValues);
   const isFatoresDirty = JSON.stringify(fatoresINSS) !== JSON.stringify(pristineFatoresINSS);
-  const isDirty = activeTab !== 'users' && (isCareersDirty || isFGSDirty || isFatoresDirty);
+  const isSalaryCapsDirty = JSON.stringify(salaryCaps) !== JSON.stringify(pristineSalaryCaps);
+  const isDirty = activeTab !== 'users' && (isCareersDirty || isFGSDirty || isFatoresDirty || isSalaryCapsDirty);
 
   // Utility to show notification
   const showNotificationObj = (type: 'success' | 'error', message: string) => {
@@ -327,6 +355,17 @@ export default function Cadastros() {
     }));
   };
 
+  const handleSalaryCapChange = (capKey: keyof SalaryCapType, inputVal: string) => {
+    let numericOnly = inputVal.replace(/\D/g, '');
+    const numericInt = parseInt(numericOnly, 10) || 0;
+    const decimalValue = numericInt / 100;
+
+    setSalaryCaps(prev => ({
+      ...prev,
+      [capKey]: decimalValue
+    }));
+  };
+
   // Search career list
   const filteredCareers = Object.entries(careerDisplayNames).filter(([key, name]) => {
     return name.toLowerCase().includes(searchFilter.toLowerCase()) || key.toLowerCase().includes(searchFilter.toLowerCase());
@@ -352,6 +391,11 @@ export default function Cadastros() {
         setPristineFatoresINSS(JSON.parse(JSON.stringify(saved)));
         localStorage.removeItem('dgep_draft_fatores_inss');
         showNotificationObj('success', 'A tabela de Fatores de Conversão foi salva e aplicada com sucesso!');
+      } else if (activeTab === 'salaryCaps') {
+        saveSalaryCaps(salaryCaps);
+        setPristineSalaryCaps(JSON.parse(JSON.stringify(salaryCaps)));
+        localStorage.removeItem('dgep_draft_salary_caps');
+        showNotificationObj('success', 'Os limites do Teto Constitucional foram salvos e aplicados com sucesso!');
       }
       setShowConfirmSave(false);
     } catch (err: any) {
@@ -365,14 +409,18 @@ export default function Cadastros() {
     resetSettingsToDefaults();
     localStorage.removeItem('dgep_draft_career_data');
     localStorage.removeItem('dgep_draft_fg_values');
+    localStorage.removeItem('dgep_draft_salary_caps');
     const loadedCareers = getSavedCareerData();
     const loadedFGs = getSavedFGValues();
+    const loadedSalaryCaps = getSavedSalaryCaps();
     setCareersData(loadedCareers);
     setPristineCareersData(JSON.parse(JSON.stringify(loadedCareers)));
     setFgValues(loadedFGs);
     setPristineFgValues(JSON.parse(JSON.stringify(loadedFGs)));
+    setSalaryCaps(loadedSalaryCaps);
+    setPristineSalaryCaps(JSON.parse(JSON.stringify(loadedSalaryCaps)));
     setShowConfirmReset(false);
-    showNotificationObj('success', 'Os salários base e valores de referências das FGs foram restaurados com sucesso para os padrões. O cadastro dos Fatores de Conversão foi preservado.');
+    showNotificationObj('success', 'Os salários base, referências das FGs e limites do Teto Constitucional foram restaurados com sucesso para os padrões. O cadastro dos Fatores de Conversão foi preservado.');
   };
 
   const currentCareerValues = careersData[selectedCareer] || {};
@@ -462,6 +510,16 @@ export default function Cadastros() {
             }`}
           >
             <Award size={16} /> Funções Gratificadas
+          </button>
+          <button
+            onClick={() => setActiveTab('salaryCaps')}
+            className={`py-3 px-6 text-sm font-bold border-b-2 cursor-pointer transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === 'salaryCaps'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Sliders size={16} /> Teto Constitucional
           </button>
         </div>
 
@@ -840,6 +898,60 @@ export default function Cadastros() {
                     placeholder="Exemplo para preenchimento:&#10;jan/26 1,026961&#10;fev/26 1,022970&#10;mar/26 1,017274&#10;abr/26 1,008100"
                     className="w-full p-3 font-mono text-xs sm:text-sm bg-white border border-[#dee2e6] focus:outline-none focus:ring-2 focus:ring-indigo-600/15 focus:border-indigo-600 rounded-lg transition-all leading-relaxed"
                   />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'salaryCaps' && (
+          /* SECTION 5: SALARY CAPS EDITOR */
+          <div className="space-y-6 pt-2">
+            <div className="bg-[#fcfdfe] border border-gray-200 rounded-xl p-5 shadow-2xs space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">
+                  Teto Constitucional
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Ajuste os valores limites de teto constitucional para remunerações atuais e projetadas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="bg-white border hover:bg-slate-50/5 hover:border-slate-200 border-gray-200/50 p-5 rounded-xl flex flex-col gap-3 shadow-2xs transition-all">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
+                    Teto Geral (Demais Cargos)
+                  </span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-2.5 text-xs text-gray-400 font-semibold select-none">R$</span>
+                    <input
+                      type="text"
+                      value={formatValueBRL(salaryCaps.general)}
+                      onChange={(e) => handleSalaryCapChange('general', e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 border border-gray-250 focus:outline-none focus:ring-1.5 focus:ring-indigo-600/20 focus:border-indigo-600 rounded-lg text-sm font-black text-gray-855 text-right font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] text-gray-400">
+                    Teto municipal de remuneração aplicável aos servidores de carreira geral (Padrão: R$ 37.068,57).
+                  </span>
+                </div>
+
+                <div className="bg-white border hover:bg-slate-50/5 hover:border-slate-200 border-gray-200/50 p-5 rounded-xl flex flex-col gap-3 shadow-2xs transition-all">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
+                    Teto para Procurador Jurídico
+                  </span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-2.5 text-xs text-gray-400 font-semibold select-none">R$</span>
+                    <input
+                      type="text"
+                      value={formatValueBRL(salaryCaps.procurador)}
+                      onChange={(e) => handleSalaryCapChange('procurador', e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 border border-gray-250 focus:outline-none focus:ring-1.5 focus:ring-indigo-600/20 focus:border-indigo-600 rounded-lg text-sm font-black text-gray-855 text-right font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] text-gray-400">
+                    Limite constitucional diferenciado para os ocupantes do cargo de Procurador Jurídico (Padrão: R$ 46.366,19).
+                  </span>
                 </div>
               </div>
             </div>

@@ -31,7 +31,7 @@ import {
   createNewSimulation,
   saveSimulation
 } from '../utils/simulationsStore';
-import { getSavedCareerData, getSavedFatoresINSS, getSavedFGValues } from '../utils/settingsStore';
+import { getSavedCareerData, getSavedFatoresINSS, getSavedFGValues, getSavedSalaryCaps } from '../utils/settingsStore';
 import { exportToPDF, exportToExcel } from '../utils/exportHelpers';
 import { romanNumerals, stimulusPercentages, ATS_PERCENTAGES, SALARY_CAP_GENERAL, SALARY_CAP_PROCURADOR } from '../data/careers';
 
@@ -2085,7 +2085,10 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       const carrGrat = (sim.selectedCareer === 'procurador_juridico') ? base * 0.60 : (sim.selectedCareer === 'contador' ? base * 0.75 : 0);
       const chosenGrat = Math.max(funcVal, carrGrat);
 
-      return base + techVal + atsVal + stimVal + chosenGrat;
+      const rawVal = base + techVal + atsVal + stimVal + chosenGrat;
+      const caps = getSavedSalaryCaps();
+      const cap = (sim.selectedCareer === 'procurador_juridico' ? caps.procurador : caps.general);
+      return Math.min(rawVal, cap);
     };
 
     if (activeRule && activeRule.aplicavel && activeRule.data) {

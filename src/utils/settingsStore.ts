@@ -1,4 +1,9 @@
-import { careerData as defaultCareerData, fgValues as defaultFGValues } from '../data/careers';
+import { 
+  careerData as defaultCareerData, 
+  fgValues as defaultFGValues,
+  SALARY_CAP_GENERAL,
+  SALARY_CAP_PROCURADOR 
+} from '../data/careers';
 import { 
   isFirebaseConfigured, 
   getFirestoreSettings, 
@@ -8,6 +13,7 @@ import {
 const CAREERS_CACHE_KEY = 'dgep_custom_career_data';
 const FG_CACHE_KEY = 'dgep_custom_fg_values';
 const INSS_FATORES_CACHE_KEY = 'dgep_custom_inss_fatores';
+const SALARY_CAPS_CACHE_KEY = 'dgep_custom_salary_caps';
 
 export interface FGValuesType {
   FG4: number;
@@ -29,10 +35,20 @@ export interface FatoresINSSData {
   history?: { [monthYear: string]: string };
 }
 
+export interface SalaryCapType {
+  general: number;
+  procurador: number;
+}
+
 export const defaultFatoresINSS: FatoresINSSData = {
   referenceMonthYear: '',
   fatoresText: '',
   history: {}
+};
+
+export const defaultSalaryCap: SalaryCapType = {
+  general: SALARY_CAP_GENERAL,
+  procurador: SALARY_CAP_PROCURADOR
 };
 
 // Helper to generate a robust API URL to avoid relative URL parsing bugs in restricted iframes
@@ -51,10 +67,16 @@ function getSafeApiUrl(path: string): string {
 }
 
 // Global cache to serve sync calls
-let settingsCache = {
+let settingsCache: {
+  fatoresINSS: FatoresINSSData;
+  careers: CareerDataType;
+  fgs: FGValuesType;
+  salaryCaps: SalaryCapType;
+} = {
   fatoresINSS: defaultFatoresINSS,
   careers: defaultCareerData,
-  fgs: defaultFGValues as FGValuesType
+  fgs: defaultFGValues as FGValuesType,
+  salaryCaps: defaultSalaryCap
 };
 
 // Sync with backend & LocalStorage fallback for high resilience on static hosts
@@ -63,6 +85,7 @@ async function persistSettings() {
     localStorage.setItem(CAREERS_CACHE_KEY, JSON.stringify(settingsCache.careers));
     localStorage.setItem(FG_CACHE_KEY, JSON.stringify(settingsCache.fgs));
     localStorage.setItem(INSS_FATORES_CACHE_KEY, JSON.stringify(settingsCache.fatoresINSS));
+    localStorage.setItem(SALARY_CAPS_CACHE_KEY, JSON.stringify(settingsCache.salaryCaps));
   } catch (lsErr) {
     console.warn('Persisted settings in local memory fallback:', lsErr);
   }
@@ -100,6 +123,9 @@ export async function loadSettingsFromServer(): Promise<void> {
     
     const localFatores = localStorage.getItem(INSS_FATORES_CACHE_KEY);
     if (localFatores) settingsCache.fatoresINSS = JSON.parse(localFatores);
+
+    const localSalaryCaps = localStorage.getItem(SALARY_CAPS_CACHE_KEY);
+    if (localSalaryCaps) settingsCache.salaryCaps = JSON.parse(localSalaryCaps);
   } catch (e) {
     console.warn('Error loading local settings cache:', e);
   }
@@ -120,6 +146,10 @@ export async function loadSettingsFromServer(): Promise<void> {
         if (fsSettings.fgs && fsSettings.fgs.FG4 > 0) {
           settingsCache.fgs = fsSettings.fgs;
           localStorage.setItem(FG_CACHE_KEY, JSON.stringify(fsSettings.fgs));
+        }
+        if (fsSettings.salaryCaps && fsSettings.salaryCaps.general > 0) {
+          settingsCache.salaryCaps = fsSettings.salaryCaps;
+          localStorage.setItem(SALARY_CAPS_CACHE_KEY, JSON.stringify(fsSettings.salaryCaps));
         }
         return; // Firestore load successful
       }
@@ -155,6 +185,13 @@ export async function loadSettingsFromServer(): Promise<void> {
         settingsCache.fgs = data.fgs;
         localStorage.setItem(FG_CACHE_KEY, JSON.stringify(data.fgs));
       } else if (settingsCache.fgs.FG4 > 0) {
+        needsUpload = true;
+      }
+
+      if (data.salaryCaps && data.salaryCaps.general > 0) {
+        settingsCache.salaryCaps = data.salaryCaps;
+        localStorage.setItem(SALARY_CAPS_CACHE_KEY, JSON.stringify(data.salaryCaps));
+      } else if (settingsCache.salaryCaps.general > 0) {
         needsUpload = true;
       }
       
@@ -212,9 +249,21 @@ export function saveFatoresINSS(data: FatoresINSSData): void {
   persistSettings();
 }
 
+// Get helper for Salary Caps
+export function getSavedSalaryCaps(): SalaryCapType {
+  return settingsCache.salaryCaps || defaultSalaryCap;
+}
+
+// Save helper for Salary Caps
+export function saveSalaryCaps(values: SalaryCapType): void {
+  settingsCache.salaryCaps = values;
+  persistSettings();
+}
+
 // Reset all values to initial defaults from careers.ts (but keep Fatores de Conversão intact)
 export function resetSettingsToDefaults(): void {
   settingsCache.careers = defaultCareerData;
   settingsCache.fgs = defaultFGValues as FGValuesType;
+  settingsCache.salaryCaps = defaultSalaryCap;
   persistSettings();
 }

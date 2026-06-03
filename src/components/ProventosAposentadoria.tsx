@@ -23,11 +23,9 @@ import {
   careerDisplayNames, 
   romanNumerals, 
   stimulusPercentages, 
-  ATS_PERCENTAGES, 
-  SALARY_CAP_GENERAL, 
-  SALARY_CAP_PROCURADOR 
+  ATS_PERCENTAGES 
 } from '../data/careers';
-import { getSavedCareerData, getSavedFGValues, getSavedFatoresINSS } from '../utils/settingsStore';
+import { getSavedCareerData, getSavedFGValues, getSavedFatoresINSS, getSavedSalaryCaps } from '../utils/settingsStore';
 import { 
   ProventosFormData,
   IncorporationRow,
@@ -582,7 +580,8 @@ export default function ProventosAposentadoria() {
           const chosenGrat = Math.max(funcVal, carrGrat);
 
           const proventos = base + techVal + atsVal + stimVal + chosenGrat;
-          const cap = (careerKey === 'procurador_juridico' ? SALARY_CAP_PROCURADOR : SALARY_CAP_GENERAL);
+          const caps = getSavedSalaryCaps();
+          const cap = (careerKey === 'procurador_juridico' ? caps.procurador : caps.general);
           const contrib = Math.min(proventos, cap);
           const redutor = proventos > cap ? proventos - cap : 0;
           allContribs.push(contrib);
@@ -971,7 +970,8 @@ export default function ProventosAposentadoria() {
         // Current Situation metadata
         const curBandIdx = manualBand ? manualBand - 1 : getCareerBandIndex(today, admissionDate);
         const curBase = selectedCareerTable[romanNumerals[curBandIdx]];
-        const cap = (careerKey === 'procurador_juridico' ? SALARY_CAP_PROCURADOR : SALARY_CAP_GENERAL);
+        const caps = getSavedSalaryCaps();
+        const cap = (careerKey === 'procurador_juridico' ? caps.procurador : caps.general);
         const currentGross = Math.min(curBase * 1.3, cap);
 
         const actualAge = (actualRetirementDate.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
