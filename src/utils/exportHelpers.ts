@@ -105,6 +105,15 @@ export function exportToPDF(
     format: 'a4'
   });
 
+  const activeRule = regrasResults.find((r: any) => r.isVantajosa);
+  const endDate = (activeRule && activeRule.aplicavel && activeRule.data) ? new Date(activeRule.data) : new Date();
+  
+  const adm = sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00') : new Date();
+  const timeInDays = sim.ingressoCmc ? (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24) : 0;
+  
+  const totalDiasSPConsolidado = Math.max(0, timeInDays + calculatedDiasSP - (sim.diasAfastamento || 0));
+  const totalDiasContribConsolidado = Math.max(0, timeInDays + calculatedDiasSP + calculatedDiasINSS - (sim.diasAfastamento || 0));
+
   // Top header bar
   doc.setFillColor(0, 75, 141); // Deep Blue #004b8d
   doc.rect(0, 0, 210, 28, 'F');
@@ -125,7 +134,8 @@ export function exportToPDF(
     ['Servidor:', sim.nome || 'NÃO IDENTIFICADO', 'Matrícula:', sim.matricula || 'N/A'],
     ['Cargo Atual:', (sim.cargo || sim.selectedCareer || '').replace(/_/g, ' ') + ' / ' + (sim.selectedLevel || ''), 'Gênero/Sexo:', sim.sexo || 'N/A'],
     ['Data Nasc.:', formatDate(sim.dataNascimento), 'Admissão CMC:', formatDate(sim.ingressoCmc), ],
-    ['Tempo PMC (SP):', formatarTempoCompleto(calculatedDiasSP), 'Tempo Averbado (INSS):', formatarTempoCompleto(calculatedDiasINSS)]
+    ['Tempo Município:', formatarTempoCompleto(Math.floor(totalDiasSPConsolidado)), 'Averbado (INSS):', formatarTempoCompleto(calculatedDiasINSS)],
+    ['Deduções/Afastam.:', formatarTempoCompleto(sim.diasAfastamento || 0), 'Total Consolidado:', formatarTempoCompleto(Math.floor(totalDiasContribConsolidado))]
   ];
 
   if (sim.congelada) {
@@ -362,10 +372,6 @@ export function exportToPDF(
   }
 
   // Box 5: PROSPECÇÃO DE TRABALHO ADICIONAL [Moved here second!]
-  const adm = sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00') : new Date();
-  const activeRule = regrasResults.find((r: any) => r.isVantajosa);
-  const endDate = (activeRule && activeRule.aplicavel && activeRule.data) ? new Date(activeRule.data) : new Date();
-  const timeInDays = (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24);
   const totalDays = timeInDays + calculatedDiasINSS + calculatedDiasSP;
   const yearsTotalBase = totalDays / 365.25;
 
@@ -723,6 +729,15 @@ export function exportToExcel(
   addRow(['Relatório Analítico de Proventos Consolidados']);
   addRow(['Data de Emissão:', new Date().toLocaleString('pt-BR')]);
 
+  const activeRule = regrasResults.find((r: any) => r.isVantajosa);
+  const endDate = (activeRule && activeRule.aplicavel && activeRule.data) ? new Date(activeRule.data) : new Date();
+  
+  const adm = sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00') : new Date();
+  const timeInDays = sim.ingressoCmc ? (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24) : 0;
+  
+  const totalDiasSPConsolidado = Math.max(0, timeInDays + calculatedDiasSP - (sim.diasAfastamento || 0));
+  const totalDiasContribConsolidado = Math.max(0, timeInDays + calculatedDiasSP + calculatedDiasINSS - (sim.diasAfastamento || 0));
+
   // Section: Identification
   addSection('DADOS IDENTIFICADORES DO SERVIDOR');
   addRow(['Campo', 'Valor Detalhado']);
@@ -733,10 +748,18 @@ export function exportToExcel(
   addRow(['Gênero / Sexo Biológico', sim.sexo || 'N/A']);
   addRow(['Data de Nascimento', formatDate(sim.dataNascimento)]);
   addRow(['Data de Admissão (CMC/SP)', formatDate(sim.ingressoCmc)]);
-  addRow(['Tempo Total no Município (Dias)', String(calculatedDiasSP)]);
-  addRow(['Tempo Total no Município (Anos, Meses, Dias)', formatarTempoCompleto(calculatedDiasSP)]);
+  addRow(['Tempo de Câmara/Exercício Efetivo (Dias)', String(Math.floor(timeInDays))]);
+  addRow(['Tempo de Câmara/Exercício Efetivo (Anos, Meses, Dias)', formatarTempoCompleto(Math.floor(timeInDays))]);
+  addRow(['Tempo Consolidado no Município (PMC/SP Efetivo) (Dias)', String(Math.floor(totalDiasSPConsolidado))]);
+  addRow(['Tempo Consolidado no Município (PMC/SP Efetivo) (Anos, Meses, Dias)', formatarTempoCompleto(Math.floor(totalDiasSPConsolidado))]);
   addRow(['Tempo Total Averbações/INSS (Dias)', String(calculatedDiasINSS)]);
   addRow(['Tempo Total Averbações/INSS (Anos, Meses, Dias)', formatarTempoCompleto(calculatedDiasINSS)]);
+  if (sim.diasAfastamento && sim.diasAfastamento > 0) {
+    addRow(['Afastamentos / Deduções (Dias)', String(sim.diasAfastamento)]);
+    addRow(['Afastamentos / Deduções (Anos, Meses, Dias)', formatarTempoCompleto(sim.diasAfastamento)]);
+  }
+  addRow(['Tempo Total de Contribuição Consolidado (Dias)', String(Math.floor(totalDiasContribConsolidado))]);
+  addRow(['Tempo Total de Contribuição Consolidado (Anos, Meses, Dias)', formatarTempoCompleto(Math.floor(totalDiasContribConsolidado))]);
 
   // Section: IPMC Regras Previdenciárias
   addSection('1. COMPATIBILIDADE E REGRAS DE INGRESSO (IPMC)');

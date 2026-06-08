@@ -2578,6 +2578,8 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     return { 
       calculatedDiasINSS,
       calculatedDiasSP,
+      timeInDays,
+      totalDays,
       regrasResults,
       proventosResults: { 
         average: mediaSalarialGeral, 
@@ -2610,6 +2612,8 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
   const proventosResults = resultadosAtuais.proventosResults;
   const calculatedDiasINSS = resultadosAtuais.calculatedDiasINSS;
   const calculatedDiasSP = resultadosAtuais.calculatedDiasSP;
+  const timeInDays = resultadosAtuais.timeInDays || 0;
+  const totalDays = resultadosAtuais.totalDays || 0;
 
   const simFiltrado = React.useMemo(() => {
     if (temSimulado && cenarioAtivo === 'sem_simulado') {
@@ -2675,7 +2679,7 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
             <div className="break-words"><span className="font-bold text-gray-500 block text-[10px] uppercase">Nome do Servidor</span>{sim.nome || 'NÃO IDENTIFICADO'}</div>
             <div className="break-words"><span className="font-bold text-gray-500 block text-[10px] uppercase">Matrícula</span>{sim.matricula || 'N/A'}</div>
             <div className="break-words"><span className="font-bold text-gray-500 block text-[10px] uppercase">Cargo Atual</span>{(sim.cargo || sim.selectedCareer).replace(/_/g, ' ')} / {sim.selectedLevel}</div>
-            <div className="break-words"><span className="font-bold text-gray-500 block text-[10px] uppercase">Nasc. / Sexo</span>{sim.dataNascimento ? new Date(sim.dataNascimento).toLocaleDateString('pt-BR') : 'N/A'} - {sim.sexo || 'N/A'}</div>
+            <div className="break-words"><span className="font-bold text-gray-500 block text-[10px] uppercase">Nasc. / Sexo</span>{sim.dataNascimento ? new Date(sim.dataNascimento + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'} - {sim.sexo || 'N/A'}</div>
           </div>
 
           {/* DOSSIÊ DETALHADO DE PERÍODOS DE CONTRIBUIÇÃO CONSIDERADOS (Anos, Meses, Dias vs Dias Absolutos) */}
@@ -2684,30 +2688,39 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
               <Info size={16} className="text-slate-600 shrink-0" />
               Detalhamento dos Períodos Contributivos Considerados (Análise Consolidada)
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">Tempo no Município (PMC/SP Efetivo)</span>
-                <strong className="text-sm text-slate-900 block font-mono font-bold">{formatarTempo(calculatedDiasSP)}</strong>
-                <span className="text-[11px] text-gray-500 block">Tempo acumulado cumprido em exercício efetivo no âmbito do município, com todos os efeitos legais.</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">Tempo na Câmara (CMC)</span>
+                <strong className="text-sm text-slate-900 block font-mono font-bold">
+                  {formatarTempo(Math.max(0, timeInDays))}
+                </strong>
+                <span className="text-[11px] text-gray-500 block">Tempo acumulado em exercício efetivo na Câmara Municipal de Curitiba, desde a data de admissão.</span>
               </div>
               <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">Tempo Externo Averbado (INSS)</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">Tempo Público Averbado (SP)</span>
+                <strong className="text-sm text-slate-900 block font-mono font-bold">
+                  {formatarTempo(calculatedDiasSP)}
+                </strong>
+                <span className="text-[11px] text-gray-500 block">Tempo averbado de outros cargos, empregos ou funções em órgãos da Administração Pública (RPPS).</span>
+              </div>
+              <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">Tempo Privado Averbado (INSS)</span>
                 <strong className="text-sm text-slate-900 block font-mono font-bold">{formatarTempo(calculatedDiasINSS)}</strong>
-                <span className="text-[11px] text-gray-500 block">Tempo total convalidado que foi averbado junto ao Regime Geral (RGPS) ou outros regimes institucionais.</span>
+                <span className="text-[11px] text-gray-500 block">Tempo total averbado de iniciativa privada junto ao Regime Geral de Previdência Social (RGPS).</span>
               </div>
               {sim.diasAfastamento && sim.diasAfastamento > 0 ? (
                 <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1">
                   <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wide block">Afastamentos / Deduções</span>
                   <strong className="text-sm text-red-600 block font-mono font-bold">{formatarTempo(sim.diasAfastamento)}</strong>
-                  <span className="text-[11px] text-gray-500 block">Soma de dias desconsiderados da contagem geral devido a interrupções legais de vínculo.</span>
+                  <span className="text-[11px] text-gray-500 block">Soma de dias desconsiderados da contagem geral devido a interrupções de vínculo ou licenças sem contribuição.</span>
                 </div>
               ) : null}
-              <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1 md:col-span-2 lg:col-span-1">
+              <div className="bg-white p-4 rounded-lg border border-slate-200 space-y-1 sm:col-span-2 lg:col-span-3 xl:col-span-1">
                 <span className="text-[10px] font-bold text-[#004b8d] uppercase tracking-wide block">Tempo Total de Contribuição Consolidado</span>
                 <strong className="text-sm text-[#004b8d] block font-mono font-bold">
-                  {formatarTempo(Math.max(0, calculatedDiasSP + calculatedDiasINSS - (sim.diasAfastamento || 0)))}
+                  {formatarTempo(Math.max(0, totalDays - (sim.diasAfastamento || 0)))}
                 </strong>
-                <span className="text-[11px] text-gray-500 block">Saldo líquido final dos tempos de cooperação previdenciária computados nesta simulação.</span>
+                <span className="text-[11px] text-gray-500 block">Saldo líquido final de todos os tempos computados para fins de aposentadoria (CMC + Averbados - Deduções).</span>
               </div>
             </div>
           </div>
@@ -2910,92 +2923,98 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
           {opts.proventos && (
             <div className="space-y-6">
               <h4 className="text-lg font-bold text-[#004b8d] border-l-4 border-[#004b8d] pl-2 uppercase tracking-wider">3. Estimativa de Proventos a Conceder</h4>
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 relative overflow-hidden">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Média Salarial Apurada (Estimada)</span>
-                    <strong className="text-3xl text-emerald-900 font-bold tracking-tight">R$ {formatCurrency(proventosResults.average)}</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Cota Progressiva (EC 103/2019)</span>
-                    <strong className="text-3xl text-emerald-900 font-bold tracking-tight">{(proventosResults.perc * 100).toFixed(2)}%</strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Benefício Teto de Proventos</span>
-                    <strong className="text-3xl text-emerald-900 font-bold tracking-tight">R$ {formatCurrency(proventosResults.benefit)}</strong>
-                  </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-emerald-200/60 text-xs text-emerald-800 flex gap-4">
-                  <span><strong>Meses no Histórico:</strong> {proventosResults.histCount} contribuições informadas.</span>
-                  <span><strong>Extensão Trabalhada:</strong> {sim.extensionMonths ?? 0} {sim.extensionMonths === 1 ? 'mês projetado' : 'meses projetados'} a mais para cota percentual.</span>
-                </div>
-              </div>
 
-              {/* Otimização de Média – Lei Complementar 133/2021, Art. 15 § 10 */}
-              {proventosResults.optimizationResult && (
-                <div className="border border-indigo-105 bg-indigo-50/15 rounded-xl p-5 sm:p-6 space-y-5" style={{ borderColor: '#e0e7ff' }}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100/60 font-sans">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 text-white rounded-lg flex items-center justify-center" style={{ backgroundColor: '#4f46e5' }}>
-                        <Sparkles size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-extrabold text-indigo-950 uppercase tracking-normal">Otimização de Média (Lei Complementar 133/2021, Art. 15 § 10)</h3>
-                        <p className="text-xs text-indigo-600">Simulação de descarte das menores contribuições para maximização do provento final</p>
-                      </div>
-                    </div>
-                    <div className="bg-indigo-100 text-indigo-800 text-[10px] uppercase font-extrabold px-2.5 py-1 rounded-full select-none tracking-widest leading-none shrink-0 text-center">
-                      Exclusão Limite de 20%
-                    </div>
-                  </div>
+              {proventosResults.optimizationResult && proventosResults.optimizationResult.bestK > 0 ? (() => {
+                const opt = proventosResults.optimizationResult;
+                return (
+                  <div className="space-y-6">
+                    {/* Two scenarios side by side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* Cenário Original (Sem Exclusão) - SEM DESTAQUE */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 md:p-6 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center gap-2 pb-3 border-b border-slate-200">
+                            <span className="text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded font-extrabold uppercase tracking-wide">Sem Exclusão</span>
+                            <h5 className="text-sm font-bold text-slate-800">Cenário Tradicional Original</h5>
+                          </div>
+                          
+                          <div className="mt-5 space-y-4">
+                            <div>
+                              <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Média Salarial Apurada</span>
+                              <strong className="text-2xl text-slate-800 font-bold tracking-tight">R$ {formatCurrency(opt.originalAverage)}</strong>
+                            </div>
+                            
+                            <div>
+                              <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Alíquota do Benefício (Cota)</span>
+                              <strong className="text-2xl text-slate-800 font-bold tracking-tight">{(opt.originalPerc * 100).toFixed(2)}%</strong>
+                            </div>
 
-                  {proventosResults.optimizationResult.bestK === 0 ? (
-                    <div className="flex items-start gap-4 bg-white border border-gray-250 p-4 rounded-xl">
-                      <CheckCircle className="text-emerald-600 shrink-0 mt-0.5" size={18} />
-                      <div className="text-sm text-gray-700 leading-relaxed font-sans">
-                        <p className="font-bold text-gray-900">Sua média original é a ideal!</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Todos os meses incorporados ajudam a manter o coeficiente ou coeficiente geral estável. Nenhuma exclusão de contribuição externa pós-07/1994 resultará em benefício final superior a este.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-5 font-sans">
-                      {/* Glance Dashboard comparison table */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Cenário Original */}
-                        <div className="bg-white border border-gray-200 p-4 rounded-xl space-y-2">
-                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Cenário Original (Sem Exclusão)</span>
-                          <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-150 pb-1.5 pt-1">
-                            <span>Média Salarial Apurada:</span>
-                            <strong className="text-gray-800 font-semibold">R$ {formatCurrency(proventosResults.optimizationResult.originalAverage)}</strong>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
-                            <span>Alíquota do Benefício:</span>
-                            <strong className="text-gray-800 font-semibold">{(proventosResults.optimizationResult.originalPerc * 100).toFixed(2)}%</strong>
-                          </div>
-                          <div className="flex justify-between text-sm pt-1">
-                            <span className="text-gray-500">Benefício Mensal Estimado:</span>
-                            <strong className="text-gray-800 font-mono">R$ {formatCurrency(proventosResults.optimizationResult.originalBenefit)}</strong>
+                            <div>
+                              <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Benefício Mensal Consolidado</span>
+                              <strong className="text-2xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(opt.originalBenefit)}</strong>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Cenário Otimizado */}
-                        <div className="bg-emerald-50/45 border border-emerald-200 p-4 rounded-xl space-y-2 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 -mr-2 -mt-2 w-8 h-8 rotate-12 bg-emerald-100/40" />
-                          <span className="block text-[9px] font-extrabold text-emerald-700 uppercase tracking-wider">Cenário Otimizado (Recomendado)</span>
-                          <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5 pt-1">
-                            <span>Média Otimizada (+{(((proventosResults.optimizationResult.bestAverage - proventosResults.optimizationResult.originalAverage) / (proventosResults.optimizationResult.originalAverage || 1)) * 100).toFixed(1)}%):</span>
-                            <strong className="text-emerald-950 font-bold">R$ {formatCurrency(proventosResults.optimizationResult.bestAverage)}</strong>
+                        <div className="mt-5 pt-3 border-t border-slate-200 text-[11px] text-slate-500">
+                          Cálculo integral considerando 100% dos meses de contribuição no histórico previdenciário do servidor.
+                        </div>
+                      </div>
+
+                      {/* Cenário Otimizado (Recomendado - §10) - COM DESTAQUE EMERALD */}
+                      <div className="bg-emerald-50 border-2 border-emerald-400 rounded-xl p-5 md:p-6 flex flex-col justify-between relative overflow-hidden shadow-sm">
+                        <div className="absolute top-0 right-0 -mr-3 -mt-3 w-12 h-12 rotate-12 bg-emerald-100/40" />
+                        
+                        <div>
+                          <div className="flex items-center justify-between pb-3 border-b border-emerald-200">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-extrabold uppercase tracking-wide">Recomendado</span>
+                              <h5 className="text-sm font-bold text-emerald-950">Cenário Otimizado Final (§10)</h5>
+                            </div>
+                            <Sparkles size={16} className="text-emerald-600 animate-pulse" />
                           </div>
-                          <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
-                            <span>Alíquota Ajustada (Perda de {proventosResults.optimizationResult.bestK} meses):</span>
-                            <strong className="text-red-750 font-bold">{(proventosResults.optimizationResult.bestPerc * 100).toFixed(2)}%</strong>
+
+                          <div className="mt-5 space-y-4">
+                            <div>
+                              <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Média Otimizada (+{(((opt.bestAverage - opt.originalAverage) / (opt.originalAverage || 1)) * 100).toFixed(1)}%)</span>
+                              <strong className="text-2xl text-emerald-950 font-bold tracking-tight">R$ {formatCurrency(opt.bestAverage)}</strong>
+                            </div>
+                            
+                            <div>
+                              <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Alíquota Ajustada (Perda de {opt.bestK} meses)</span>
+                              <strong className="text-2xl text-emerald-900 font-bold tracking-tight">{(opt.bestPerc * 100).toFixed(2)}%</strong>
+                            </div>
+
+                            <div>
+                              <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Benefício Otimizado Final</span>
+                              <strong className="text-2xl text-emerald-950 font-extrabold tracking-tight font-mono">R$ {formatCurrency(opt.bestBenefit)}</strong>
+                            </div>
                           </div>
-                          <div className="flex justify-between text-sm pt-1">
-                            <span className="font-extrabold text-emerald-800">Benefício Otimizado Final:</span>
-                            <strong className="text-emerald-900 font-bold font-mono">R$ {formatCurrency(proventosResults.optimizationResult.bestBenefit)}</strong>
+                        </div>
+
+                        <div className="mt-5 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-700 flex flex-wrap gap-x-4 gap-y-1">
+                          <span><strong>Contribuições Calculadas:</strong> {proventosResults.histCount - opt.bestK} meses.</span>
+                          <span><strong>Extensão Projetada:</strong> {sim.extensionMonths ?? 0} {sim.extensionMonths === 1 ? 'mês' : 'meses'}</span>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Optimization support details card below the side-by-side scenarios */}
+                    <div className="border border-indigo-100 bg-indigo-50/10 rounded-xl p-5 sm:p-6 space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100/60 font-sans">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 text-white rounded-lg flex items-center justify-center bg-indigo-600">
+                            <Sparkles size={18} />
                           </div>
+                          <div>
+                            <h3 className="text-sm font-extrabold text-indigo-950 uppercase tracking-normal">Análise do Algoritmo de Otimização (§10, Art. 15, LC 133/2021)</h3>
+                            <p className="text-xs text-indigo-600">Simulação e descarte automático de até 20% das menores contribuições do servidor</p>
+                          </div>
+                        </div>
+                        <div className="bg-indigo-100 text-indigo-800 text-[10px] uppercase font-extrabold px-2.5 py-1 rounded-full select-none tracking-widest leading-none shrink-0 text-center">
+                          Descartes Inteligentes
                         </div>
                       </div>
 
@@ -3003,12 +3022,12 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                         <div className="flex items-center gap-2">
                           <TrendingUp size={20} />
                           <div>
-                            <span className="text-xs text-emerald-100 block font-medium uppercase tracking-wider leading-none mb-1">Vantagem Financeira Líquida</span>
-                            <span className="text-[11px] text-white">Descarte otimizado de {proventosResults.optimizationResult.bestK} meses de menor contribuição.</span>
+                            <span className="text-xs text-emerald-100 block font-medium uppercase tracking-wider leading-none mb-1">Ganho Financeiro Mensal Líquero</span>
+                            <span className="text-[11px] text-white">Descarte otimizado de {opt.bestK} menor(es) contribuição(ões) no histórico previdenciário.</span>
                           </div>
                         </div>
                         <span className="text-xl sm:text-2xl font-bold font-mono shrink-0">
-                          + R$ {formatCurrency(proventosResults.optimizationResult.bestBenefit - proventosResults.optimizationResult.originalBenefit)}<span className="text-xs font-normal text-emerald-100">/mês</span>
+                          + R$ {formatCurrency(opt.bestBenefit - opt.originalBenefit)}<span className="text-xs font-normal text-emerald-100">/mês</span>
                         </span>
                       </div>
 
@@ -3019,10 +3038,10 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                           Lançamentos Sugeridos Para Exclusão da Média:
                         </h4>
                         <p className="text-xs text-gray-500 leading-relaxed">
-                          As seguintes {proventosResults.optimizationResult.bestK} contribuições foram identificadas como desvantajosas para sua média (baixando o cálculo salarial mais do que compensavam em tempo de serviço). Elas devem ser descartadas pelo RPPS conforme Art. 15 § 10 da LC 133/2021:
+                          As seguintes {opt.bestK} contribuições foram identificadas como desvantajosas para sua média (diminuindo o cálculo salarial mais do que agregavam no coeficiente de tempo de serviço). Elas devem ser legalmente desconsideradas pelo RPPS:
                         </p>
                         <div className="flex flex-wrap gap-2 pt-1">
-                          {proventosResults.optimizationResult.bestExcluded.map((exc: any, index: number) => (
+                          {opt.bestExcluded.map((exc: any, index: number) => (
                             <div key={index} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-950 text-xs font-bold rounded-lg border border-red-100 transition-colors shadow-2xs">
                               <span className="bg-red-200 text-red-800 w-4 h-4 rounded-full flex items-center justify-center font-bold text-[9px]">{index + 1}</span>
                               <span className="font-mono">{exc.competencia}</span>
@@ -3053,8 +3072,8 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                               </tr>
                             </thead>
                             <tbody>
-                              {proventosResults.optimizationResult.history.map((step: any) => {
-                                const isOptimal = step.k === proventosResults.optimizationResult.bestK;
+                              {opt.history.map((step: any) => {
+                                const isOptimal = step.k === opt.bestK;
                                 return (
                                   <tr key={step.k} className={`border-b last:border-0 hover:bg-gray-50/50 ${isOptimal ? 'bg-emerald-50/80 font-bold border-emerald-200 text-emerald-950' : 'text-gray-600 border-indigo-50/40'}`}>
                                     <td className="py-2 px-3 flex items-center gap-1.5">
@@ -3064,8 +3083,8 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                                     <td className="py-2 px-3 text-right font-mono">R$ {formatCurrency(step.average)}</td>
                                     <td className="py-2 px-3 text-right font-mono">{(step.perc * 100).toFixed(2)}%</td>
                                     <td className="py-2 px-3 text-right font-mono">R$ {formatCurrency(step.benefit)}</td>
-                                    <td className={`py-2 px-3 text-right font-mono font-bold ${step.k === 0 ? 'text-gray-400' : (step.benefit > proventosResults.optimizationResult.originalBenefit ? 'text-emerald-700' : 'text-rose-600')}`}>
-                                      {step.k === 0 ? 'Linha Base' : `${step.benefit >= proventosResults.optimizationResult.originalBenefit ? '+' : ''}R$ ${formatCurrency(step.benefit - proventosResults.optimizationResult.originalBenefit)}`}
+                                    <td className={`py-2 px-3 text-right font-mono font-bold ${step.k === 0 ? 'text-gray-400' : (step.benefit > opt.originalBenefit ? 'text-emerald-700' : 'text-rose-600')}`}>
+                                      {step.k === 0 ? 'Linha Base' : `${step.benefit >= opt.originalBenefit ? '+' : ''} R$ ${formatCurrency(step.benefit - opt.originalBenefit)}`}
                                     </td>
                                   </tr>
                                 );
@@ -3073,6 +3092,39 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                             </tbody>
                           </table>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                /* No optimization has benefits, or bestK === 0 (identical to original) */
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Média Salarial Apurada (Única)</span>
+                      <strong className="text-3xl text-slate-800 font-bold tracking-tight">R$ {formatCurrency(proventosResults.average)}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Cota Progressiva (EC 103/2019)</span>
+                      <strong className="text-3xl text-slate-800 font-bold tracking-tight">{(proventosResults.perc * 100).toFixed(2)}%</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Benefício Teto de Proventos</span>
+                      <strong className="text-3xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(proventosResults.benefit)}</strong>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-600 flex gap-4">
+                    <span><strong>Meses no Histórico:</strong> {proventosResults.histCount} contribuições informadas.</span>
+                    <span><strong>Extensão Trabalhada:</strong> {sim.extensionMonths ?? 0} {sim.extensionMonths === 1 ? 'mês projetado' : 'meses projetados'} a mais para cota percentual.</span>
+                  </div>
+                  {proventosResults.optimizationResult && (
+                    <div className="mt-5 pt-4 border-t border-slate-200 flex items-start gap-4">
+                      <CheckCircle className="text-emerald-600 shrink-0 mt-0.5" size={18} />
+                      <div className="text-xs text-slate-500 leading-relaxed">
+                        <p className="font-bold text-slate-700">A média original é a ideal!</p>
+                        <p className="mt-0.5">
+                          Nenhum descarte de competências previdenciárias aumenta o valor calculado. Todas as contribuições registradas são mantidas para o cálculo de maior benefício previdenciário aplicável.
+                        </p>
                       </div>
                     </div>
                   )}
