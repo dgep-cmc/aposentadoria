@@ -94,8 +94,10 @@ export function exportToPDF(
   geResults: any,
   proventosResults: any,
   calculatedDiasSP: number,
-  calculatedDiasINSS: number
+  calculatedDiasINSS: number,
+  opts?: any
 ) {
+  const showGE = opts?.ge !== false;
   // Create jsPDF document
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -197,7 +199,7 @@ export function exportToPDF(
   });
 
   // Box 2: Gratificação Especial Retributiva (GE)
-  if (geResults && (geResults.fgs.length > 0 || geResults.stims.length > 0)) {
+  if (showGE && geResults && (geResults.fgs.length > 0 || geResults.stims.length > 0)) {
     const geRows: any[] = [];
     
     geResults.fgs.forEach((fg: any) => {
@@ -232,7 +234,7 @@ export function exportToPDF(
 
   // Box 3: Estimativa de Proventos a Conceder - Emphasizing Optimized Scenario
   const hasOpt = proventosResults.optimizationResult && proventosResults.optimizationResult.bestK > 0;
-  const totalGEToAdd = (geResults ? (geResults.totalFGs + geResults.totalStims) : 0);
+  const totalGEToAdd = (showGE && geResults ? (geResults.totalFGs + geResults.totalStims) : 0);
   
   let proventosHeaders = ['Parâmetro de Cálculo', 'Valor Mensal Estimado'];
   let proventosRows: any[] = [];
@@ -700,8 +702,10 @@ export function exportToExcel(
   geResults: any,
   proventosResults: any,
   calculatedDiasSP: number,
-  calculatedDiasINSS: number
+  calculatedDiasINSS: number,
+  opts?: any
 ) {
+  const showGE = opts?.ge !== false;
   let csvContent = '\uFEFF'; // Excel UTF-8 BOM indicator
 
   // Section Header Function
@@ -751,7 +755,7 @@ export function exportToExcel(
   });
 
   // Section: GE details
-  if (geResults && (geResults.fgs.length > 0 || geResults.stims.length > 0)) {
+  if (showGE && geResults && (geResults.fgs.length > 0 || geResults.stims.length > 0)) {
     addSection('2. COBRANÇA E INCORPORAÇÃO DE PARCELAS - GRATIFICAÇÃO ESPECIAL (GE)');
     addRow(['Modalidade de Parcela', 'Nível de Referência / Função', 'Quantidade Meses Cumpridos', 'Ganhos Mensais Proporcionais (R$)']);
     
@@ -767,7 +771,7 @@ export function exportToExcel(
   }
 
   // Section: Financial Results Summary
-  const totalGEToAdd = (geResults ? (geResults.totalFGs + geResults.totalStims) : 0);
+  const totalGEToAdd = (showGE && geResults ? (geResults.totalFGs + geResults.totalStims) : 0);
   addSection('3. SÍNTESE MATRICIAL DE PROVENTOS PREVIDENCIÁRIOS');
   addRow(['Variável de Cálculo Previdenciário', 'Resultado Apurado (R$ ou %)']);
   addRow(['Média Salarial Apurada Geral', formatCurrency(proventosResults.average)]);
