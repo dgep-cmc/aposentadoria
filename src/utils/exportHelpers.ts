@@ -107,6 +107,9 @@ export function exportToPDF(
 
   const activeRule = regrasResults.find((r: any) => r.isVantajosa);
   const endDate = (activeRule && activeRule.aplicavel && activeRule.data) ? new Date(activeRule.data) : new Date();
+  if (sim.extensionMonths && sim.extensionMonths > 0) {
+    endDate.setMonth(endDate.getMonth() + sim.extensionMonths);
+  }
   
   const adm = sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00') : new Date();
   const timeInDays = sim.ingressoCmc ? (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24) : 0;
@@ -373,7 +376,7 @@ export function exportToPDF(
 
   // Box 5: PROSPECÇÃO DE TRABALHO ADICIONAL [Moved here second!]
   const totalDays = timeInDays + calculatedDiasINSS + calculatedDiasSP;
-  const yearsTotalBase = totalDays / 365.25;
+  const yearsTotalBase = (totalDays / 365.25) - ((sim.extensionMonths || 0) / 12);
 
   const selectedExt = sim.extensionMonths || 0;
   const extScenarios = [0, 12, 24, 36, 48];
@@ -731,6 +734,9 @@ export function exportToExcel(
 
   const activeRule = regrasResults.find((r: any) => r.isVantajosa);
   const endDate = (activeRule && activeRule.aplicavel && activeRule.data) ? new Date(activeRule.data) : new Date();
+  if (sim.extensionMonths && sim.extensionMonths > 0) {
+    endDate.setMonth(endDate.getMonth() + sim.extensionMonths);
+  }
   
   const adm = sim.ingressoCmc ? new Date(sim.ingressoCmc + 'T00:00:00') : new Date();
   const timeInDays = sim.ingressoCmc ? (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24) : 0;

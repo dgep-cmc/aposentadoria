@@ -473,9 +473,9 @@ export default function ProventosAposentadoria() {
           date: new Date(s.date + 'T00:00:00')
         }));
 
-        const gratifiedFunctions = formData.functions.filter(f => f.start && f.end).map(f => ({
+        const gratifiedFunctions = formData.functions.filter(f => f.start).map(f => ({
           start: new Date(f.start + 'T00:00:00'),
-          end: new Date(f.end + 'T00:00:00'),
+          end: f.end ? new Date(f.end + 'T00:00:00') : null,
           level: f.level
         }));
 
@@ -574,7 +574,14 @@ export default function ProventosAposentadoria() {
 
           let funcVal = 0;
           gratifiedFunctions.forEach(f => {
-            if (curr >= f.start && curr <= f.end) funcVal = currentFGs[f.level];
+            const afterStart = curr >= f.start;
+            const beforeEnd = !f.end || curr <= f.end;
+            if (afterStart && beforeEnd) {
+              const val = currentFGs[f.level as keyof typeof currentFGs] || 0;
+              if (val > funcVal) {
+                funcVal = val;
+              }
+            }
           });
           const carrGrat = (careerKey === 'procurador_juridico') ? base * 0.60 : (careerKey === 'contador' ? base * 0.75 : 0);
           const chosenGrat = Math.max(funcVal, carrGrat);
