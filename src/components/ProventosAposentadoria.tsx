@@ -1875,11 +1875,15 @@ export default function ProventosAposentadoria() {
                         <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Cenário Original (Sem Exclusão)</span>
                         <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-100 pb-1.5 pt-1">
                           <span>Média Salarial Apurada:</span>
-                          <strong className="text-gray-800">R$ {formatCurrency(optimizationResult.originalAverage)}</strong>
+                          <strong className="text-gray-800 font-bold">R$ {formatCurrency(optimizationResult.originalAverage)}</strong>
                         </div>
-                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5 font-sans">
                           <span>Alíquota do Benefício:</span>
                           <strong className="text-gray-800">{(optimizationResult.originalPerc * 100).toFixed(2)}%</strong>
+                        </div>
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
+                          <span>Competências Utilizadas:</span>
+                          <strong className="text-gray-700">{optimizationResult.totalIncCount} meses</strong>
                         </div>
                         <div className="flex justify-between text-sm pt-1">
                           <span className="text-gray-500">Benefício Mensal Estimado:</span>
@@ -1890,18 +1894,25 @@ export default function ProventosAposentadoria() {
                       {/* Cenário Otimizado */}
                       <div className="bg-emerald-50/40 border border-emerald-200 p-4 rounded-xl space-y-2 relative overflow-hidden">
                         <div className="absolute top-0 right-0 -mr-2 -mt-2 w-8 h-8 rotate-12 bg-emerald-100/40" />
-                        <span className="block text-[9px] font-extrabold text-emerald-700 uppercase tracking-wider">Cenário Otimizado (Recomendado)</span>
+                        <span className="block text-[9px] font-extrabold text-emerald-700 uppercase tracking-wider">Cenário Otimizado (§10 do Art. 15 da LC 133/2021)</span>
                         <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5 pt-1">
                           <span>Média Otimizada (+{(((optimizationResult.bestAverage - optimizationResult.originalAverage) / (optimizationResult.originalAverage || 1)) * 100).toFixed(1)}%):</span>
                           <strong className="text-emerald-950 font-bold">R$ {formatCurrency(optimizationResult.bestAverage)}</strong>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
                           <span>Alíquota Ajustada (Perda de {optimizationResult.bestK} meses):</span>
-                          <strong className="text-red-700">{(optimizationResult.bestPerc * 100).toFixed(2)}%</strong>
+                          <strong className="text-red-700 font-bold">{(optimizationResult.bestPerc * 100).toFixed(2)}%</strong>
+                        </div>
+                        <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
+                          <span>Competências Utilizadas (Otimizadas):</span>
+                          <strong className="text-emerald-950 font-bold">{optimizationResult.totalIncCount - optimizationResult.bestK} meses</strong>
                         </div>
                         <div className="flex justify-between text-sm pt-1">
                           <span className="font-extrabold text-emerald-800">Benefício Otimizado Final:</span>
                           <strong className="text-emerald-900 font-bold font-mono">R$ {formatCurrency(optimizationResult.bestBenefit)}</strong>
+                        </div>
+                        <div className="text-[10px] text-emerald-850 pt-1 border-t border-emerald-100/50 leading-relaxed font-sans">
+                          Fundamentação legal: § 10 do Artigo 15 da Lei Complementar nº 133/2021 (Regime Previdenciário Municipal de Curitiba).
                         </div>
                       </div>
                     </div>

@@ -802,7 +802,7 @@ function StepContribuicoes({ sim, updateSim }: { sim: UnifiedSimulation, updateS
             placeholder="Mês/Ano Valor&#10;jan/2000 1500,00&#10;fev/2000 1550,00..."
           />
           <span className="text-[10px] text-gray-400 block pb-1 md:max-w-xs leading-relaxed">
-             Estas informações farão parte da simulação de Proventos baseada na EC 103/2019.
+             Estas informações farão parte da simulação de Proventos baseada na Lei Complementar nº 133/2021.
           </span>
         </div>
 
@@ -2578,6 +2578,44 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     });
     analyticalListStr += `======================================================================\n\n`;
 
+    analyticalListStr += `======================================================================\n`;
+    analyticalListStr += `MEMÓRIA DE CÁLCULO E ANÁLISE DO CENÁRIO OTIMIZADO (§ 10, Art. 15 da LC 133/2021):\n`;
+    analyticalListStr += `======================================================================\n`;
+    analyticalListStr += `   Total de Competências Consideradas Pós-07/1994 : ${optimizationResult.totalIncCount} meses\n`;
+    analyticalListStr += `   Quantidade de Menores Competências Descartadas  : ${optimizationResult.bestK} meses (Limite: ${optimizationResult.limitExclusion} meses)\n`;
+    analyticalListStr += `   Total de Competências Efetivamente Utilizadas   : ${optimizationResult.totalIncCount - optimizationResult.bestK} meses\n\n`;
+    analyticalListStr += `   DIAGNÓSTICO FINANCEIRO COMPARATIVO:\n`;
+    analyticalListStr += `   ------------------------------------------------------------------\n`;
+    analyticalListStr += `   Métrica                  | Cenário Tradicional | Cenário Otimizado\n`;
+    analyticalListStr += `   ------------------------------------------------------------------\n`;
+    analyticalListStr += `   Média Salarial Apurada   | R$ ${formatCurrency(optimizationResult.originalAverage).padEnd(16)} | R$ ${formatCurrency(optimizationResult.bestAverage).padEnd(16)}\n`;
+    analyticalListStr += `   Alíquota do Benefício    | ${(optimizationResult.originalPerc * 100).toFixed(2).replace('.', ',')}%${''.padEnd(13)} | ${(optimizationResult.bestPerc * 100).toFixed(2).replace('.', ',')}%${''.padEnd(13)}\n`;
+    analyticalListStr += `   Benefício Mensal Consolid| R$ ${formatCurrency(optimizationResult.originalBenefit).padEnd(16)} | R$ ${formatCurrency(optimizationResult.bestBenefit).padEnd(16)}\n`;
+    analyticalListStr += `   ------------------------------------------------------------------\n`;
+    
+    const ganhoLiquido = optimizationResult.bestBenefit - optimizationResult.originalBenefit;
+    if (ganhoLiquido > 0) {
+      analyticalListStr += `   >>> VANTAGEM FINANCEIRA LÍQUIDA OBTIDA: + R$ ${formatCurrency(ganhoLiquido)}/mês! <<<\n\n`;
+    } else {
+      analyticalListStr += `   >>> NENHUM DESCARTE RESULTOU EM GANHO SUPERIOR À MÉDIA ORIGINAL. <<<\n\n`;
+    }
+
+    if (optimizationResult.bestExcluded.length > 0) {
+      analyticalListStr += `   RELAÇÃO DAS COMPETÊNCIAS EXCLUÍDAS DO CÁLCULO DA MÉDIA OTIMIZADA:\n`;
+      analyticalListStr += `   ------------------------------------------------------------------\n`;
+      optimizationResult.bestExcluded.forEach((exc: any, index: number) => {
+        let typeLabel = "Contribuição";
+        if (exc.type === 'chamber-historical') typeLabel = "Histórico Câmara";
+        else if (exc.type === 'chamber-projected' || exc.type === 'chamber-proj') typeLabel = "Projetado Câmara";
+        else if (exc.type === 'projected-future') typeLabel = "Período Futuro";
+        else if (exc.type === 'contribution-only') typeLabel = "Incorporação";
+        
+        analyticalListStr += `   [${(index + 1).toString().padStart(2, '0')}] ${exc.competencia} - ${typeLabel.padEnd(20)} | Valor Corrigido: R$ ${formatCurrency(exc.value)}\n`;
+      });
+      analyticalListStr += `   ------------------------------------------------------------------\n`;
+    }
+    analyticalListStr += `======================================================================\n\n`;
+
     log += analyticalListStr;
     
     return { 
@@ -2959,11 +2997,16 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                               <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Benefício Mensal Consolidado</span>
                               <strong className="text-2xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(opt.originalBenefit)}</strong>
                             </div>
+
+                            <div>
+                              <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Competências Utilizadas</span>
+                              <strong className="text-xl text-slate-700 font-bold tracking-tight">{proventosResults.histCount} meses</strong>
+                            </div>
                           </div>
                         </div>
 
                         <div className="mt-5 pt-3 border-t border-slate-200 text-[11px] text-slate-500">
-                          Cálculo integral considerando 100% dos meses de contribuição no histórico previdenciário do servidor.
+                          Cálculo integral considerando 100% dos meses de contribuição no histórico previdenciário do servidor. Base de cálculo composta por {proventosResults.histCount} competências.
                         </div>
                       </div>
 
@@ -2995,12 +3038,22 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                               <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Benefício Otimizado Final</span>
                               <strong className="text-2xl text-emerald-950 font-extrabold tracking-tight font-mono">R$ {formatCurrency(opt.bestBenefit)}</strong>
                             </div>
+
+                            <div>
+                              <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Competências Utilizadas (Otimizadas)</span>
+                              <strong className="text-xl text-emerald-900 font-bold tracking-tight">{proventosResults.histCount - opt.bestK} meses</strong>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="mt-5 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-700 flex flex-wrap gap-x-4 gap-y-1">
-                          <span><strong>Contribuições Calculadas:</strong> {proventosResults.histCount - opt.bestK} meses.</span>
-                          <span><strong>Extensão Projetada:</strong> {sim.extensionMonths ?? 0} {sim.extensionMonths === 1 ? 'mês' : 'meses'}</span>
+                        <div className="mt-5 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-700 flex flex-col gap-2">
+                          <span className="text-[10px] text-emerald-850 font-bold block leading-relaxed">
+                            Fundamentação Legal Completa: Art. 15, § 10 da Lei Complementar nº 133/2021 (Curitiba - Descarte das Menores Contribuições).
+                          </span>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 font-medium">
+                            <span><strong>Contribuições Calculadas:</strong> {proventosResults.histCount - opt.bestK} meses.</span>
+                            <span><strong>Extensão Projetada:</strong> {sim.extensionMonths ?? 0} {sim.extensionMonths === 1 ? 'mês' : 'meses'}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -3110,7 +3163,7 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                       <strong className="text-3xl text-slate-800 font-bold tracking-tight">R$ {formatCurrency(proventosResults.average)}</strong>
                     </div>
                     <div>
-                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Cota Progressiva (EC 103/2019)</span>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Cota Progressiva (LC 133/2021)</span>
                       <strong className="text-3xl text-slate-800 font-bold tracking-tight">{(proventosResults.perc * 100).toFixed(2)}%</strong>
                     </div>
                     <div>

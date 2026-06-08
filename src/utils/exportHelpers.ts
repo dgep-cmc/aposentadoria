@@ -276,7 +276,7 @@ export function exportToPDF(
   } else {
     proventosRows = [
       ['Média Salarial Geral Estimada (§2º, Art. 15 da L.C. 133/21):', `R$ ${formatCurrency(proventosResults.average)}`],
-      ['Alíquota Base / Cota Progressiva de Transição (EC 103/19):', `${(proventosResults.perc * 100).toFixed(2)}%`],
+      ['Alíquota Base / Cota Progressiva de Transição (LC 133/21):', `${(proventosResults.perc * 100).toFixed(2)}%`],
       ['Provento Mensal Básico Estimado (Média x Alíquota):', `R$ ${formatCurrency(proventosResults.benefit)}`],
     ];
     if (totalGEToAdd > 0) {
