@@ -1782,6 +1782,8 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
     // --- PROVENTOS DO CENÁRIO ---
     let perc = 0.60;
     let yearsTotal = 0;
+    let timeInDays = 0;
+    let totalDays = 0;
     
     if (sim.ingressoCmc) {
       const activeRule = regrasResults.find((r: any) => r.isVantajosa);
@@ -1791,9 +1793,9 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
       }
       
       const adm = new Date(sim.ingressoCmc + 'T00:00:00');
-      const timeInDays = (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24);
+      timeInDays = (endDate.getTime() - adm.getTime()) / (1000 * 60 * 60 * 24);
       
-      const totalDays = timeInDays + calculatedDiasINSS + calculatedDiasSP;
+      totalDays = timeInDays + calculatedDiasINSS + calculatedDiasSP;
       yearsTotal = totalDays / 365.25;
       
       // Regra progressiva IPMC: 60% aos 20 anos + 2% ao ano para ambos os sexos (município de Curitiba - LC 133/2021)
