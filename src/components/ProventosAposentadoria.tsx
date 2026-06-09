@@ -968,6 +968,7 @@ export default function ProventosAposentadoria() {
           }),
           history: optimizationHistory,
           limitExclusion,
+          yearsTotal,
           totalIncCount: candidateMonths.length
         });
 
@@ -1864,6 +1865,9 @@ export default function ProventosAposentadoria() {
                       <p className="text-xs text-gray-500 mt-1">
                         Todos os meses incorporados ajudam a manter o coeficiente ou coeficiente geral estável. Nenhuma exclusão de contribuição externa pós-07/1994 resultará em benefício final superior a este.
                       </p>
+                      <p className="text-xs text-gray-600 mt-2">
+                        <strong>Tempo considerado para proporcionalidade:</strong> {formatarTempoCompleto(Math.round((optimizationResult.yearsTotal || 0) * 365))}
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -1877,9 +1881,15 @@ export default function ProventosAposentadoria() {
                           <span>Média Salarial Apurada:</span>
                           <strong className="text-gray-800 font-bold">R$ {formatCurrency(optimizationResult.originalAverage)}</strong>
                         </div>
-                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5 font-sans">
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
                           <span>Alíquota do Benefício:</span>
                           <strong className="text-gray-800">{(optimizationResult.originalPerc * 100).toFixed(2)}%</strong>
+                        </div>
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
+                          <span>Tempo para Proporcionalidade:</span>
+                          <strong className="text-gray-700">
+                            {formatarTempoCompleto(Math.round((optimizationResult.yearsTotal || 0) * 365))}
+                          </strong>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm text-gray-600 border-b border-gray-50 pb-1.5">
                           <span>Competências Utilizadas:</span>
@@ -1902,6 +1912,12 @@ export default function ProventosAposentadoria() {
                         <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
                           <span>Alíquota Ajustada (Perda de {optimizationResult.bestK} meses):</span>
                           <strong className="text-red-700 font-bold">{(optimizationResult.bestPerc * 100).toFixed(2)}%</strong>
+                        </div>
+                        <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
+                          <span>Tempo Consertado / Ajustado:</span>
+                          <strong className="text-emerald-500 font-bold">
+                            {formatarTempoCompleto(Math.round(Math.max(0, (optimizationResult.yearsTotal || 0) - optimizationResult.bestK / 12) * 365))}
+                          </strong>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm text-[#004b8d] border-b border-emerald-100 pb-1.5">
                           <span>Competências Utilizadas (Otimizadas):</span>

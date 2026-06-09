@@ -259,7 +259,12 @@ export function exportToPDF(
   if (hasOpt) {
     const opt = proventosResults.optimizationResult;
     proventosHeaders = ['Dimensão / Rubrica de Cálculo', 'Cenário Tradicional (Sem Exclusão)', 'Cenário Otimizado (Recomendado - §10)'];
+    
+    const tradDays = Math.round((proventosResults.yearsTotal || 0) * 365);
+    const optDays = Math.round(Math.max(0, (proventosResults.yearsTotal || 0) - opt.bestK / 12) * 365);
+
     proventosRows = [
+      ['Tempo considerado p/ Proporcionalidade:', formatarTempoCompleto(tradDays), formatarTempoCompleto(optDays)],
       ['Média Salarial Apurada:', `R$ ${formatCurrency(opt.originalAverage)}`, `R$ ${formatCurrency(opt.bestAverage)}`],
       ['Alíquota Base / Coeficiente:', `${(opt.originalPerc * 100).toFixed(2)}%`, `${(opt.bestPerc * 100).toFixed(2)}% (perda de ${opt.bestK} m)`],
       ['Provento Mensal Básico:', `R$ ${formatCurrency(opt.originalBenefit)}`, `R$ ${formatCurrency(opt.bestBenefit)}`],
@@ -274,7 +279,10 @@ export function exportToPDF(
       2: { fontStyle: 'bold', cellWidth: 60, halign: 'right' }
     };
   } else {
+    const tradDays = Math.round((proventosResults.yearsTotal || 0) * 365);
+
     proventosRows = [
+      ['Tempo considerado p/ Proporcionalidade:', formatarTempoCompleto(tradDays)],
       ['Média Salarial Geral Estimada (§2º, Art. 15 da L.C. 133/21):', `R$ ${formatCurrency(proventosResults.average)}`],
       ['Alíquota Base / Cota Progressiva de Transição (LC 133/21):', `${(proventosResults.perc * 100).toFixed(2)}%`],
       ['Provento Mensal Básico Estimado (Média x Alíquota):', `R$ ${formatCurrency(proventosResults.benefit)}`],

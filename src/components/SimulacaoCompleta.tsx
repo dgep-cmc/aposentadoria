@@ -2994,6 +2994,13 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                             </div>
 
                             <div>
+                              <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Tempo para Proporcionalidade</span>
+                              <strong className="text-sm text-slate-700 font-bold tracking-tight block">
+                                {formatarTempo(Math.round(proventosResults.yearsTotal * 365.25))}
+                              </strong>
+                            </div>
+
+                            <div>
                               <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Benefício Mensal Consolidado</span>
                               <strong className="text-2xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(opt.originalBenefit)}</strong>
                             </div>
@@ -3032,6 +3039,13 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
                             <div>
                               <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Alíquota Ajustada (Perda de {opt.bestK} meses)</span>
                               <strong className="text-2xl text-emerald-900 font-bold tracking-tight">{(opt.bestPerc * 100).toFixed(2)}%</strong>
+                            </div>
+
+                            <div>
+                              <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Tempo Ajustado (Proporcionalidade)</span>
+                              <strong className="text-sm text-emerald-900 font-bold tracking-tight block">
+                                {formatarTempo(Math.round(Math.max(0, proventosResults.yearsTotal - opt.bestK / 12) * 365.25))}
+                              </strong>
                             </div>
 
                             <div>
@@ -3157,18 +3171,24 @@ function StepGerar({ sim }: { sim: UnifiedSimulation }) {
               })() : (
                 /* No optimization has benefits, or bestK === 0 (identical to original) */
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div>
                       <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Média Salarial Apurada (Única)</span>
-                      <strong className="text-3xl text-slate-800 font-bold tracking-tight">R$ {formatCurrency(proventosResults.average)}</strong>
+                      <strong className="text-2xl text-slate-800 font-bold tracking-tight">R$ {formatCurrency(proventosResults.average)}</strong>
                     </div>
                     <div>
                       <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Cota Progressiva (LC 133/2021)</span>
-                      <strong className="text-3xl text-slate-800 font-bold tracking-tight">{(proventosResults.perc * 100).toFixed(2)}%</strong>
+                      <strong className="text-2xl text-slate-800 font-bold tracking-tight">{(proventosResults.perc * 100).toFixed(2)}%</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Tempo considerado para proporcionalidade</span>
+                      <strong className="text-sm text-slate-800 font-bold tracking-tight block">
+                        {formatarTempo(Math.round(proventosResults.yearsTotal * 365.25))}
+                      </strong>
                     </div>
                     <div>
                       <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Benefício Teto de Proventos</span>
-                      <strong className="text-3xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(proventosResults.benefit)}</strong>
+                      <strong className="text-2xl text-slate-900 font-bold tracking-tight font-mono">R$ {formatCurrency(proventosResults.benefit)}</strong>
                     </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-600 flex gap-4">
