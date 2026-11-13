@@ -1,0 +1,123 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User authorized to access and utilize the simulation system",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the user used for Google Authentication"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "Role of the user in the system"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Display name of the registered user"
+        },
+        "allowed": {
+          "type": "boolean",
+          "description": "Whether the user is allowed to log in and use the system"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user was registered"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user was last updated"
+        }
+      },
+      "required": ["email", "role", "nome", "allowed"]
+    },
+    "Simulation": {
+      "title": "Simulation",
+      "description": "Saved simulation record for a civil servant",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nome": {
+          "type": "string"
+        },
+        "matricula": {
+          "type": "string"
+        },
+        "sexo": {
+          "type": "string"
+        },
+        "dataNascimento": {
+          "type": "string"
+        },
+        "ingressoCmc": {
+          "type": "string"
+        },
+        "ingressoCargoAtual": {
+          "type": "string"
+        },
+        "cargo": {
+          "type": "string"
+        },
+        "selectedCareer": {
+          "type": "string"
+        },
+        "careerLevel": {
+          "type": "string"
+        },
+        "selectedLevel": {
+          "type": "string"
+        },
+        "lastAtsConcession": {
+          "type": "string"
+        },
+        "lastAtsNumber": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "nome", "updatedAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global administration settings including careers, fgs, and factoresINSS",
+      "type": "object",
+      "properties": {
+        "fatoresINSS": {
+          "type": "object"
+        },
+        "careers": {
+          "type": "object"
+        },
+        "fgs": {
+          "type": "object"
+        }
+      },
+      "required": ["fatoresINSS", "careers", "fgs"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection storing user profiles and access controls"
+    },
+    "/simulations/{simulationId}": {
+      "schema": "Simulation",
+      "description": "Collection storing full unified simulations records"
+    },
+    "/settings/{documentId}": {
+      "schema": "Settings",
+      "description": "Collection storing global customizable system parameters like careers, FGs, and INSS conversion factors"
+    }
+  }
+}

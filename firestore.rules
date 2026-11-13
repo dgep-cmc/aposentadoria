@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Security primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function getUserEmail() {
+      return request.auth.token.email;
+    }
+
+    // Verifies whether the logged-in user is allowed to access and use the simulator
+    function isAllowedUser() {
+      return isEmailVerified() && (
+        getUserEmail() == 'diegofmartins@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.allowed == true)
+      );
+    }
+
+    // Verifies whether the logged-in user represents an Administrator
+    function isAdmin() {
+      return isEmailVerified() && (
+        getUserEmail() == 'diegofmartins@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'admin')
+      );
+    }
+
+    // 3. Match collection rules
+    match /users/{userEmail} {
+      // Any authenticated and authorized user can list other users, while any email-verified user can retrieve their own profile to verify permissions
+      allow get: if isAllowedUser() || (isEmailVerified() && userEmail == getUserEmail());
+      allow list: if isAllowedUser();
+      
+      // Only Administrators can create, update, or remove users
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /simulations/{simulationId} {
+      // Any authorized user can read simulations (shared workspace)
+      allow read, list: if isAllowedUser();
+      
+      // Any authorized user can write or delete simulations
+      allow create, update, delete: if isAllowedUser();
+    }
+
+    match /settings/{documentId} {
+      // Any authorized user can read settings parameters
+      allow read: if isAllowedUser();
+      
+      // Only Administrators can write or modify settings
+      allow write: if isAdmin();
+    }
+  }
+}
