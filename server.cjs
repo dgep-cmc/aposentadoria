@@ -26,11 +26,13 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_promises = __toESM(require("fs/promises"), 1);
 var import_vite = require("vite");
+var import_os = __toESM(require("os"), 1);
 var app = (0, import_express.default)();
 var PORT = 3e3;
 app.use(import_express.default.json({ limit: "10mb" }));
-var DB_FILE = import_path.default.join(process.cwd(), "simulations_db.json");
-var SETTINGS_DB_FILE = import_path.default.join(process.cwd(), "settings_db.json");
+var storageDir = process.env.NODE_ENV === "production" ? import_os.default.tmpdir() : process.cwd();
+var DB_FILE = import_path.default.join(storageDir, "simulations_db.json");
+var SETTINGS_DB_FILE = import_path.default.join(storageDir, "settings_db.json");
 async function initDb() {
   try {
     await import_promises.default.access(DB_FILE);
