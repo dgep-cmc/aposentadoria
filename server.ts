@@ -4,13 +4,16 @@ import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 
+import os from "os";
+
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-const DB_FILE = path.join(process.cwd(), "simulations_db.json");
-const SETTINGS_DB_FILE = path.join(process.cwd(), "settings_db.json");
+const storageDir = (process.env.NODE_ENV === "production") ? os.tmpdir() : process.cwd();
+const DB_FILE = path.join(storageDir, "simulations_db.json");
+const SETTINGS_DB_FILE = path.join(storageDir, "settings_db.json");
 
 // Initialize DB file if not exists
 async function initDb() {
