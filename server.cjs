@@ -103,13 +103,20 @@ app.delete("/api/simulations/:id", async (req, res) => {
   }
 });
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await (0, import_vite.createServer)({
-      server: { middlewareMode: true },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else {
+  let isProd = process.env.NODE_ENV === "production";
+  if (!isProd) {
+    try {
+      const vite = await (0, import_vite.createServer)({
+        server: { middlewareMode: true },
+        appType: "spa"
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn("Vite middleware not available, falling back to static build files:", e);
+      isProd = true;
+    }
+  }
+  if (isProd) {
     const distPath = import_path.default.join(process.cwd(), "dist");
     app.use(import_express.default.static(distPath));
     app.get("*", (req, res) => {
