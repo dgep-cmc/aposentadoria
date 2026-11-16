@@ -153,7 +153,7 @@ export default function App() {
           )}
           
           <div className="text-[10px] text-gray-400 select-none pt-2">
-            Diretoria de Gestão de Pessoas (DGEP) • CMC
+            Diretoria de Gestão de Pessoas (DGEP) • CMC • Versão 3.12.1
           </div>
         </div>
       </div>
@@ -293,7 +293,7 @@ export default function App() {
         
         {/* Global Footer */}
         <footer className="py-6 px-8 border-t border-[#dee2e6] text-center text-xs text-gray-400 print:hidden select-none">
-          Portal Integrado DGEP / IPMC — Versão 3.12 • Câmara Municipal de Curitiba
+          Portal Integrado DGEP / IPMC — Versão 3.12.1 • Câmara Municipal de Curitiba
         </footer>
       </div>
     </div>
