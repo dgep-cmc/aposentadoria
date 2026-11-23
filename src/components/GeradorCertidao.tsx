@@ -1837,15 +1837,11 @@ export default function GeradorCertidao({
                       ? `CERTIDÃO DE ABONO DE PERMANÊNCIA Nº ${certidaoData.numeroCertidao}`
                       : `CERTIDÃO DE APOSENTADORIA Nº ${certidaoData.numeroCertidao}`}
                 </span>
-                {certidaoData.isSimulacao ? (
+                {certidaoData.isSimulacao && (
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
                     SEM VALIDADE OFICIAL
                   </span>
-                ) : certidaoData.tipoCertidao === 'abono_permanencia' ? (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-900 border border-purple-300">
-                    EFEITO: ABONO DE PERMANÊNCIA
-                  </span>
-                ) : null}
+                )}
               </div>
               <span className="text-xs font-semibold text-gray-600">
                 Data da certidão: <strong>{certidaoData.dataCertidao}</strong>
@@ -2157,12 +2153,12 @@ export default function GeradorCertidao({
             </div>
 
             {/* Bloco 5: Lavratura */}
-            <div className="pt-6 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-6 text-xs">
-              <div className="text-gray-600">
+            <div className="pt-8 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-end gap-6 text-xs">
+              <div className="text-gray-600 self-start sm:self-center">
                 {certidaoData.lavratura.cidade}, {certidaoData.lavratura.data}
               </div>
-              <div className="text-center space-y-1">
-                <div className="w-56 border-t border-gray-400 mx-auto pt-1" />
+              <div className="text-center space-y-1 pt-6">
+                <div className="w-72 border-t border-gray-400 mx-auto pt-1.5" />
                 <p className="font-bold text-gray-900">{certidaoData.lavratura.servidorNome}</p>
                 <p className="text-[11px] text-gray-500">Matrícula {certidaoData.lavratura.servidorMatricula} • {certidaoData.lavratura.setor}</p>
               </div>

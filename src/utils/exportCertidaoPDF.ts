@@ -130,8 +130,8 @@ function renderAssinaturaInstitucional(
   const pageHeight = doc.internal.pageSize.getHeight();
 
   let y = startY;
-  // Garante espaço suficiente antes da margem do rodapé (~54mm para local/data + assinatura + rodapé)
-  if (y > pageHeight - 54) {
+  // Garante espaço suficiente antes da margem do rodapé (~56mm para local/data + assinatura + rodapé)
+  if (y > pageHeight - 56) {
     doc.addPage();
     y = margin + 8;
   }
@@ -141,7 +141,7 @@ function renderAssinaturaInstitucional(
   doc.setTextColor(...COLOR_TEXT);
   doc.text(`${lavratura.cidade || 'Curitiba'}, ${lavratura.data || ''}`, margin, y);
 
-  y += 15.0;
+  y += 17.0;
 
   const signX = pageWidth / 2;
   doc.setDrawColor(100, 116, 139);
@@ -341,20 +341,6 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
       ? `CERTIDÃO DE ABONO DE PERMANÊNCIA Nº ${data.numeroCertidao.toUpperCase()}`
       : `CERTIDÃO DE APOSENTADORIA Nº ${data.numeroCertidao.toUpperCase()}`;
     doc.text(tituloOficial, margin + 3.8, bannerMidY);
-
-    if (isAbono) {
-      const titleW = doc.getTextWidth(tituloOficial);
-      const badgeX = margin + 3.8 + titleW + 3.0;
-      const badgeText = 'EFEITO: ABONO DE PERMANÊNCIA';
-      doc.setFontSize(6.0);
-      const badgeW = doc.getTextWidth(badgeText) + 4.0;
-      doc.setFillColor(233, 213, 255);
-      doc.setDrawColor(216, 180, 254);
-      doc.setLineWidth(0.2);
-      doc.roundedRect(badgeX, currentY + 2.3, badgeW, 4.4, 0.8, 0.8, 'FD');
-      doc.setTextColor(88, 28, 135);
-      doc.text(badgeText, badgeX + 2.0, currentY + 5.3);
-    }
 
     // Data à direita
     const dateLabel = 'Data da certidão: ';
@@ -808,56 +794,76 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
     ` (${formatNumber(data.marcos.diasAte31Dez2021)} dias)`
   );
 
-  currentY += infoCardH + (isUltraCompact ? 3.5 : 4.8);
+  currentY += infoCardH + (isUltraCompact ? 4.0 : 5.5);
 
   // -----------------------------------------------------------------
-  // BLOCO 5: LAVRATURA E ASSINATURA (LAYOUT HORIZONTAL IGUAL À PRÉVIA)
+  // BLOCO 5: LAVRATURA E ASSINATURA (ESPAÇADO E EM PÁGINA ÚNICA)
   // -----------------------------------------------------------------
-  // Garantir que só quebre página em casos absolutamente extremos de extrapolação
-  if (currentY > pageHeight - 25) {
+  const matStr = data.lavratura.servidorMatricula ? `Matrícula ${data.lavratura.servidorMatricula}` : '';
+  const setorStr = data.lavratura.setor || 'Diretoria de Gestão de Pessoas — DGEP';
+  const subSignText = matStr ? `${matStr} • ${setorStr}` : setorStr;
+  const signBlockW = 104;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.2);
+  const subSignLines = doc.splitTextToSize(subSignText, signBlockW) as string[];
+
+  const belowLineH = 9.8 + Math.max(0, subSignLines.length - 1) * 3.3;
+  const footerTopLimit = pageHeight - 13.5;
+  const maxSignLineY = footerTopLimit - belowLineH;
+  const remainingSpace = maxSignLineY - currentY;
+
+  // Garantir quebra apenas em casos absolutamente extremos de extrapolação
+  if (remainingSpace < 12.0) {
     doc.addPage();
-    currentY = margin + 4;
+    currentY = margin + 6;
   }
+
+  const effectiveRemaining = maxSignLineY - currentY;
+  // Usa o espaço disponível para dar uma folga confortável acima da linha de assinatura (12mm a 22mm)
+  const signSpaceAbove =
+    remainingSpace < 12.0
+      ? 18.0
+      : Math.min(22.0, Math.min(effectiveRemaining, Math.max(12.0, effectiveRemaining * 0.68)));
 
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.28);
   doc.line(margin, currentY, margin + contentWidth, currentY);
 
-  const lavY = currentY + (isUltraCompact ? 7.5 : 9.5);
+  const signLineY = currentY + signSpaceAbove;
+  const dateY = Math.min(currentY + 8.0, signLineY - 1.5);
 
-  // Data por extenso à esquerda
+  // Local e data por extenso à esquerda
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.8);
+  doc.setFontSize(8.0);
   doc.setTextColor(75, 85, 99);
-  doc.text(`${data.lavratura.cidade || 'Curitiba'}, ${data.lavratura.data || ''}`, margin, lavY + 2.0);
+  const localDataLines = doc.splitTextToSize(
+    `${data.lavratura.cidade || 'Curitiba'}, ${data.lavratura.data || ''}`,
+    74
+  ) as string[];
+  doc.text(localDataLines, margin, dateY);
 
-  // Assinatura centralizada à direita (idêntica à Visualização Prévia)
-  const signBlockW = 84;
+  // Assinatura centralizada à direita com largura e respiro adequados
   const signCenterX = pageWidth - margin - signBlockW / 2;
-  const lineHalfW = 34;
+  const lineHalfW = 42;
 
-  doc.setDrawColor(156, 163, 175);
-  doc.setLineWidth(0.32);
-  doc.line(signCenterX - lineHalfW, lavY, signCenterX + lineHalfW, lavY);
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.35);
+  doc.line(signCenterX - lineHalfW, signLineY, signCenterX + lineHalfW, signLineY);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.0);
+  doc.setFontSize(8.4);
   doc.setTextColor(17, 24, 39);
   doc.text(
     data.lavratura.servidorNome || 'Setor de Gestão de Processos e Benefícios Funcionais',
     signCenterX,
-    lavY + 4.0,
+    signLineY + 4.4,
     { align: 'center' }
   );
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.9);
+  doc.setFontSize(7.2);
   doc.setTextColor(107, 114, 128);
-  const matStr = data.lavratura.servidorMatricula ? `Matrícula ${data.lavratura.servidorMatricula}` : '';
-  const setorStr = data.lavratura.setor || 'Diretoria de Gestão de Pessoas — DGEP';
-  const subSignText = matStr ? `${matStr} • ${setorStr}` : setorStr;
-  const subSignLines = doc.splitTextToSize(subSignText, signBlockW) as string[];
-  doc.text(subSignLines, signCenterX, lavY + 7.6, { align: 'center' });
+  doc.text(subSignLines, signCenterX, signLineY + 8.3, { align: 'center' });
 
   // Rodapés dinâmicos (suporta 1 página única com folga)
   aplicarRodapesPaginados(
