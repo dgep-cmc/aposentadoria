@@ -21,7 +21,8 @@ import {
   Save,
   Pencil,
   X,
-  Calendar
+  Calendar,
+  RotateCcw
 } from 'lucide-react';
 import { CertidaoData, gerarCertidaoAposentadoriaPadraoPDF } from '../utils/exportCertidaoPDF';
 import { 
@@ -35,7 +36,8 @@ import {
   construirCertidaoAPartirDeSimulacao, 
   diffCalendarDays, 
   calculateExactAge,
-  extrairTemposIncorporacoes
+  extrairTemposIncorporacoes,
+  reemitirCertidaoRegistrada
 } from '../utils/certidaoBuilder';
 import { getPatternForCareer } from '../utils/settingsStore';
 import { getCareerDisplayName } from '../data/careers';
@@ -47,7 +49,11 @@ import {
   atualizarCertidaoEmitida,
   excluirCertidaoEmitida,
   getProximoNumeroOficial,
-  consumirProximoNumeroOficial
+  consumirProximoNumeroOficial,
+  registrarNumeroOficialConsumido,
+  findCertidaoOficialPorNumero,
+  findCertidaoOficialPorServidor,
+  reemitirCertidaoNoRegistro
 } from '../utils/certidoesEmitidasStore';
 
 // Dados de Exemplo fiéis ao anexo oficial da Certidão nº 03/2026 (Valdemir Anselmo Pontes)
@@ -307,11 +313,19 @@ export default function GeradorCertidao({
   const [somenteServidorAtual, setSomenteServidorAtual] = useState<boolean>(Boolean(externalSim));
   const [deleteHistTarget, setDeleteHistTarget] = useState<CertidaoEmitida | null>(null);
   const [editingCertidao, setEditingCertidao] = useState<CertidaoEmitida | null>(null);
+  const [reemissaoTarget, setReemissaoTarget] = useState<CertidaoEmitida | null>(null);
+  const [reemissaoNovaDataHoje, setReemissaoNovaDataHoje] = useState<boolean>(false);
+  const [confirmNovaOuReemissao, setConfirmNovaOuReemissao] = useState<{
+    tipo: TipoCertidaoSequencial;
+    existente: CertidaoEmitida;
+  } | null>(null);
   const [numeroAposentadoria, setNumeroAposentadoria] = useState<string>(() => getProximoNumeroOficial('aposentadoria'));
   const [numeroAbono, setNumeroAbono] = useState<string>(() => getProximoNumeroOficial('abono_permanencia'));
 
   const carregarHistorico = () => {
     setHistoricoCertidoes(getCertidoesEmitidas());
+    setNumeroAposentadoria(getProximoNumeroOficial('aposentadoria'));
+    setNumeroAbono(getProximoNumeroOficial('abono_permanencia'));
   };
 
   useEffect(() => {
@@ -783,43 +797,112 @@ export default function GeradorCertidao({
 
   const resolverNumeroOficialParaEmissao = (tipo: TipoCertidaoSequencial): string => {
     const atual = (tipo === 'abono_permanencia' ? numeroAbono : numeroAposentadoria).trim();
-    if (!atual || atual === 'SIMULAÇÃO' || atual === '03/2026' || atual === getProximoNumeroOficial(tipo)) {
+    const proximoSugerido = getProximoNumeroOficial(tipo);
+    if (!atual || atual === 'SIMULAÇÃO' || atual === '03/2026' || atual === proximoSugerido) {
       return consumirProximoNumeroOficial(tipo);
     }
+    registrarNumeroOficialConsumido(tipo, atual);
     return atual;
+  };
+
+  const getSimulacaoVinculadaAtual = (): UnifiedSimulation | undefined => {
+    if (externalSim) return externalSim;
+    if (selectedSimId === 'draft') return getDraftSimulation() || draftSimulation || undefined;
+    if (selectedSimId && selectedSimId !== 'blank' && selectedSimId !== 'exemplo_valdemir') {
+      return savedSimulations.find(s => s.id === selectedSimId);
+    }
+    return undefined;
+  };
+
+  const executarReemissaoEmTela = (existente: CertidaoEmitida, tipo: TipoCertidaoSequencial) => {
+    try {
+      const snapshotAtualizado: CertidaoData = {
+        ...certidaoData,
+        numeroCertidao: existente.numeroCertidao,
+        tipoCertidao: tipo,
+        isSimulacao: false
+      };
+      const reemitida = reemitirCertidaoNoRegistro(existente.id, snapshotAtualizado);
+      gerarCertidaoAposentadoriaPadraoPDF(reemitida ? reemitida.snapshot : snapshotAtualizado);
+      setCertidaoData(reemitida ? reemitida.snapshot : snapshotAtualizado);
+      carregarHistorico();
+      onHistoricoChanged?.();
+      triggerFeedback(
+        `Certidão nº ${existente.numeroCertidao} reemitida com os dados atuais e atualizada no registro (sem gerar novo número)!`
+      );
+    } catch (e) {
+      console.error(e);
+      triggerFeedback('Erro ao reemitir o PDF da Certidão.', true);
+    }
+  };
+
+  const executarNovaEmissaoOficial = (tipo: TipoCertidaoSequencial) => {
+    const isAbono = tipo === 'abono_permanencia';
+    const numeroInformado = (isAbono ? numeroAbono : numeroAposentadoria).trim();
+
+    // Se o número informado já existe no registro para este tipo, reemite no registro existente em vez de duplicar
+    if (numeroInformado && numeroInformado !== 'SIMULAÇÃO' && numeroInformado !== '03/2026') {
+      const jaRegistradaPorNumero = findCertidaoOficialPorNumero(numeroInformado, tipo);
+      if (jaRegistradaPorNumero) {
+        executarReemissaoEmTela(jaRegistradaPorNumero, tipo);
+        return;
+      }
+    }
+
+    const numeroOficial = resolverNumeroOficialParaEmissao(tipo);
+    const oficialData: CertidaoData = {
+      ...certidaoData,
+      numeroCertidao: numeroOficial,
+      tipoCertidao: tipo,
+      isSimulacao: false
+    };
+    gerarCertidaoAposentadoriaPadraoPDF(oficialData);
+    setCertidaoData(oficialData);
+
+    const grade = oficialData.gradeTempo.tempoTotalServicoContribuicao;
+    salvarCertidaoEmitida({
+      id: `${isAbono ? 'oficial_abono' : 'oficial'}_${Date.now()}`,
+      numeroCertidao: numeroOficial,
+      tipo: 'oficial',
+      dataCertidao: oficialData.dataCertidao,
+      dataEmissaoTimestamp: new Date().toISOString(),
+      servidorNome: oficialData.servidor.nome,
+      matricula: oficialData.servidor.matricula,
+      cargo: isAbono ? `${oficialData.servidor.cargo} (Abono de Permanência)` : oficialData.servidor.cargo,
+      tempoTotalDias: grade.totalDias,
+      tempoFormatado: `${grade.anos} anos, ${grade.meses} meses e ${grade.dias} dias`,
+      emitidoPor: 'Setor de Processos e Benefícios Funcionais / DGEP',
+      snapshot: oficialData
+    });
+    carregarHistorico();
+    onHistoricoChanged?.();
+    triggerFeedback(
+      isAbono
+        ? `Certidão Oficial de Abono de Permanência nº ${numeroOficial} gerada e registrada!`
+        : `Certidão Oficial de Aposentadoria nº ${numeroOficial} gerada e registrada no controle de emissões!`
+    );
   };
 
   const handleEmitirPadrao = () => {
     try {
-      const numeroOficial = resolverNumeroOficialParaEmissao('aposentadoria');
-      const oficialData: CertidaoData = {
-        ...certidaoData,
-        numeroCertidao: numeroOficial,
-        tipoCertidao: 'aposentadoria',
-        isSimulacao: false
-      };
-      gerarCertidaoAposentadoriaPadraoPDF(oficialData);
-      setCertidaoData(oficialData);
-      setNumeroAposentadoria(getProximoNumeroOficial('aposentadoria'));
+      const numeroInformado = (numeroAposentadoria || '').trim();
+      const existentePorNumero = findCertidaoOficialPorNumero(numeroInformado, 'aposentadoria');
+      if (existentePorNumero) {
+        executarReemissaoEmTela(existentePorNumero, 'aposentadoria');
+        return;
+      }
 
-      const grade = oficialData.gradeTempo.tempoTotalServicoContribuicao;
-      salvarCertidaoEmitida({
-        id: `oficial_${Date.now()}`,
-        numeroCertidao: numeroOficial,
-        tipo: 'oficial',
-        dataCertidao: oficialData.dataCertidao,
-        dataEmissaoTimestamp: new Date().toISOString(),
-        servidorNome: oficialData.servidor.nome,
-        matricula: oficialData.servidor.matricula,
-        cargo: oficialData.servidor.cargo,
-        tempoTotalDias: grade.totalDias,
-        tempoFormatado: `${grade.anos} anos, ${grade.meses} meses e ${grade.dias} dias`,
-        emitidoPor: 'Setor de Processos e Benefícios Funcionais / DGEP',
-        snapshot: oficialData
+      const existentePorServidor = findCertidaoOficialPorServidor({
+        matricula: certidaoData.servidor.matricula,
+        servidorNome: certidaoData.servidor.nome,
+        tipoCertidao: 'aposentadoria'
       });
-      carregarHistorico();
-      onHistoricoChanged?.();
-      triggerFeedback(`Certidão Oficial de Aposentadoria nº ${numeroOficial} gerada e registrada no controle de emissões!`);
+      if (existentePorServidor) {
+        setConfirmNovaOuReemissao({ tipo: 'aposentadoria', existente: existentePorServidor });
+        return;
+      }
+
+      executarNovaEmissaoOficial('aposentadoria');
     } catch (e) {
       console.error(e);
       triggerFeedback('Erro ao gerar o PDF da Certidão. Verifique os dados inseridos.', true);
@@ -862,35 +945,24 @@ export default function GeradorCertidao({
 
   const handleEmitirAbonoOficial = () => {
     try {
-      const numeroOficial = resolverNumeroOficialParaEmissao('abono_permanencia');
-      const abonoData: CertidaoData = {
-        ...certidaoData,
-        numeroCertidao: numeroOficial,
-        tipoCertidao: 'abono_permanencia',
-        isSimulacao: false
-      };
-      gerarCertidaoAposentadoriaPadraoPDF(abonoData);
-      setCertidaoData(abonoData);
-      setNumeroAbono(getProximoNumeroOficial('abono_permanencia'));
+      const numeroInformado = (numeroAbono || '').trim();
+      const existentePorNumero = findCertidaoOficialPorNumero(numeroInformado, 'abono_permanencia');
+      if (existentePorNumero) {
+        executarReemissaoEmTela(existentePorNumero, 'abono_permanencia');
+        return;
+      }
 
-      const grade = abonoData.gradeTempo.tempoTotalServicoContribuicao;
-      salvarCertidaoEmitida({
-        id: `oficial_abono_${Date.now()}`,
-        numeroCertidao: numeroOficial,
-        tipo: 'oficial',
-        dataCertidao: abonoData.dataCertidao,
-        dataEmissaoTimestamp: new Date().toISOString(),
-        servidorNome: abonoData.servidor.nome,
-        matricula: abonoData.servidor.matricula,
-        cargo: `${abonoData.servidor.cargo} (Abono de Permanência)`,
-        tempoTotalDias: grade.totalDias,
-        tempoFormatado: `${grade.anos} anos, ${grade.meses} meses e ${grade.dias} dias`,
-        emitidoPor: 'Setor de Processos e Benefícios Funcionais / DGEP',
-        snapshot: abonoData
+      const existentePorServidor = findCertidaoOficialPorServidor({
+        matricula: certidaoData.servidor.matricula,
+        servidorNome: certidaoData.servidor.nome,
+        tipoCertidao: 'abono_permanencia'
       });
-      carregarHistorico();
-      onHistoricoChanged?.();
-      triggerFeedback(`Certidão Oficial de Abono de Permanência nº ${numeroOficial} gerada e registrada!`);
+      if (existentePorServidor) {
+        setConfirmNovaOuReemissao({ tipo: 'abono_permanencia', existente: existentePorServidor });
+        return;
+      }
+
+      executarNovaEmissaoOficial('abono_permanencia');
     } catch (e) {
       console.error(e);
       triggerFeedback('Erro ao gerar o PDF da Certidão de Abono de Permanência.', true);
@@ -1512,7 +1584,31 @@ export default function GeradorCertidao({
               </button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2.5 self-end lg:self-auto">
+            <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto">
+              {/* Botão contextual de Reemissão caso já exista certidão oficial emitida para o servidor */}
+              {(() => {
+                const tipoAtivo: TipoCertidaoSequencial =
+                  certidaoData.tipoCertidao === 'abono_permanencia' ? 'abono_permanencia' : 'aposentadoria';
+                const existenteAtiva =
+                  findCertidaoOficialPorNumero(certidaoData.numeroCertidao, tipoAtivo) ||
+                  findCertidaoOficialPorServidor({
+                    matricula: certidaoData.servidor.matricula,
+                    servidorNome: certidaoData.servidor.nome,
+                    tipoCertidao: tipoAtivo
+                  });
+                if (!existenteAtiva) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => executarReemissaoEmTela(existenteAtiva, tipoAtivo)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    title={`Reemitir certidão nº ${existenteAtiva.numeroCertidao} com os dados em tela (sem gerar novo número)`}
+                  >
+                    <RotateCcw size={14} /> Reemitir Nº {existenteAtiva.numeroCertidao}
+                  </button>
+                );
+              })()}
+
               {/* Certidão de Simulação (Aposentadoria) */}
               <button
                 type="button"
@@ -1725,21 +1821,31 @@ export default function GeradorCertidao({
 
             {/* Faixa Título */}
             <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 py-2.5 rounded-lg gap-2 border ${
-              certidaoData.tipoCertidao === 'abono_permanencia'
-                ? 'bg-purple-50/80 border-purple-300 text-purple-950'
-                : 'bg-[#f0f4f8] border-[#004b8d]/30 text-[#002f5a]'
+              certidaoData.isSimulacao
+                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                : certidaoData.tipoCertidao === 'abono_permanencia'
+                  ? 'bg-purple-50/80 border-purple-300 text-purple-950'
+                  : 'bg-[#f0f4f8] border-[#004b8d]/30 text-[#002f5a]'
             }`}>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-extrabold uppercase">
-                  {certidaoData.tipoCertidao === 'abono_permanencia'
-                    ? `CERTIDÃO DE ABONO DE PERMANÊNCIA Nº ${certidaoData.numeroCertidao}`
-                    : `CERTIDÃO DE APOSENTADORIA Nº ${certidaoData.numeroCertidao}`}
+                  {certidaoData.isSimulacao
+                    ? certidaoData.tipoCertidao === 'abono_permanencia'
+                      ? 'MINUTA DE SIMULAÇÃO — ABONO DE PERMANÊNCIA'
+                      : 'MINUTA DE SIMULAÇÃO — APOSENTADORIA'
+                    : certidaoData.tipoCertidao === 'abono_permanencia'
+                      ? `CERTIDÃO DE ABONO DE PERMANÊNCIA Nº ${certidaoData.numeroCertidao}`
+                      : `CERTIDÃO DE APOSENTADORIA Nº ${certidaoData.numeroCertidao}`}
                 </span>
-                {certidaoData.tipoCertidao === 'abono_permanencia' && (
+                {certidaoData.isSimulacao ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                    SEM VALIDADE OFICIAL
+                  </span>
+                ) : certidaoData.tipoCertidao === 'abono_permanencia' ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-900 border border-purple-300">
                     EFEITO: ABONO DE PERMANÊNCIA
                   </span>
-                )}
+                ) : null}
               </div>
               <span className="text-xs font-semibold text-gray-600">
                 Data da certidão: <strong>{certidaoData.dataCertidao}</strong>
@@ -3242,10 +3348,29 @@ export default function GeradorCertidao({
                           <span className="text-[10px] text-gray-500">{item.tempoTotalDias.toLocaleString('pt-BR')} dias líquidos</span>
                         </td>
                         <td className="p-3 text-gray-600 text-[11px]">
-                          {new Date(item.dataEmissaoTimestamp).toLocaleDateString('pt-BR')} às {new Date(item.dataEmissaoTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          <div>
+                            {new Date(item.dataEmissaoTimestamp).toLocaleDateString('pt-BR')} às {new Date(item.dataEmissaoTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                          {(item.reemissoes || 0) > 0 && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                              Reemitida {item.reemissoes}x
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReemissaoTarget(item);
+                                setReemissaoNovaDataHoje(false);
+                              }}
+                              className="p-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Reemitir esta certidão mantendo o mesmo número e registro"
+                            >
+                              <RotateCcw size={13} /> Reemitir
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleIniciarEdicaoCertidao(item)}
@@ -3334,6 +3459,187 @@ export default function GeradorCertidao({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de Reemissão de Certidão (Histórico) */}
+      {reemissaoTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-gray-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-[#002f5a]">
+                <RotateCcw size={18} className="text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-extrabold uppercase">Reemitir Certidão Registrada</h3>
+                  <p className="text-[11px] text-gray-500">
+                    Mantém o mesmo número ({reemissaoTarget.numeroCertidao}) e atualiza o registro existente
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReemissaoTarget(null)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
+              <div><strong>Servidor:</strong> {reemissaoTarget.servidorNome} (Matrícula: {reemissaoTarget.matricula || '---'})</div>
+              <div><strong>Número preservado:</strong> <span className="font-mono font-bold">{reemissaoTarget.numeroCertidao}</span></div>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+              <input
+                type="checkbox"
+                checked={reemissaoNovaDataHoje}
+                onChange={(e) => setReemissaoNovaDataHoje(e.target.checked)}
+                className="rounded border-gray-300 text-emerald-600"
+              />
+              Atualizar data de emissão da certidão para hoje ({new Date().toLocaleDateString('pt-BR')})
+            </label>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setReemissaoTarget(null)}
+                className="px-3.5 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              {(() => {
+                const simAtual = getSimulacaoVinculadaAtual();
+                const mesmaPessoaTela =
+                  certidaoData.servidor.nome &&
+                  ((certidaoData.servidor.matricula && certidaoData.servidor.matricula === reemissaoTarget.matricula) ||
+                    certidaoData.servidor.nome.trim().toLowerCase() === reemissaoTarget.servidorNome.trim().toLowerCase());
+                if (!simAtual && !mesmaPessoaTela) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = reemissaoTarget;
+                      const snapCustom = mesmaPessoaTela
+                        ? {
+                            ...certidaoData,
+                            ...(reemissaoNovaDataHoje
+                              ? {
+                                  dataCertidao: new Date().toLocaleDateString('pt-BR'),
+                                  lavratura: {
+                                    ...certidaoData.lavratura,
+                                    data: `${new Date().getDate()} de ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} de ${new Date().getFullYear()}`
+                                  }
+                                }
+                              : {})
+                          }
+                        : undefined;
+                      const updated = reemitirCertidaoRegistrada(target, {
+                        sim: simAtual,
+                        atualizarComSimulacao: Boolean(simAtual && !snapCustom),
+                        snapshotCustomizado: snapCustom,
+                        novaDataHoje: reemissaoNovaDataHoje
+                      });
+                      if (updated) setCertidaoData(updated.snapshot);
+                      setReemissaoTarget(null);
+                      carregarHistorico();
+                      onHistoricoChanged?.();
+                      triggerFeedback(`Certidão nº ${target.numeroCertidao} reemitida com os dados atualizados (sem gerar novo número)!`);
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-[#004b8d] hover:bg-[#003768] text-white text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw size={13} /> Atualizar com Dados Atuais & Reemitir
+                  </button>
+                );
+              })()}
+              <button
+                type="button"
+                onClick={() => {
+                  const target = reemissaoTarget;
+                  const updated = reemitirCertidaoRegistrada(target, {
+                    atualizarComSimulacao: false,
+                    novaDataHoje: reemissaoNovaDataHoje
+                  });
+                  if (updated) setCertidaoData(updated.snapshot);
+                  setReemissaoTarget(null);
+                  carregarHistorico();
+                  onHistoricoChanged?.();
+                  triggerFeedback(`2ª via da certidão nº ${target.numeroCertidao} reemitida no registro existente!`);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw size={13} /> Reemitir Original (2ª Via)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação quando o servidor já possui Certidão Oficial do mesmo tipo */}
+      {confirmNovaOuReemissao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-gray-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-[#002f5a]">
+                <AlertCircle size={18} className="text-amber-600" />
+                <h3 className="text-sm font-extrabold uppercase">Certidão Oficial Já Registrada</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmNovaOuReemissao(null)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-700 leading-relaxed">
+              O(A) servidor(a) <strong>{certidaoData.servidor.nome}</strong> já possui uma{' '}
+              <strong>
+                {confirmNovaOuReemissao.tipo === 'abono_permanencia'
+                  ? 'Certidão Oficial de Abono de Permanência'
+                  : 'Certidão Oficial de Aposentadoria'}
+              </strong>{' '}
+              emitida com o número <strong className="font-mono text-[#004b8d]">Nº {confirmNovaOuReemissao.existente.numeroCertidao}</strong>{' '}
+              (em {confirmNovaOuReemissao.existente.dataCertidao}).
+            </p>
+
+            <p className="text-xs text-gray-500">
+              Deseja <strong>reemitir</strong> mantendo o número <strong>{confirmNovaOuReemissao.existente.numeroCertidao}</strong> (atualiza o registro atual sem gerar número novo) ou emitir uma <strong>nova certidão</strong> com outro número?
+            </p>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setConfirmNovaOuReemissao(null)}
+                className="px-3.5 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { tipo } = confirmNovaOuReemissao;
+                  setConfirmNovaOuReemissao(null);
+                  executarNovaEmissaoOficial(tipo);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-[#004b8d] hover:bg-[#003768] text-white text-xs font-bold cursor-pointer"
+              >
+                Emitir Nova (Nº {confirmNovaOuReemissao.tipo === 'abono_permanencia' ? numeroAbono : numeroAposentadoria})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { tipo, existente } = confirmNovaOuReemissao;
+                  setConfirmNovaOuReemissao(null);
+                  executarReemissaoEmTela(existente, tipo);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw size={13} /> Reemitir Nº {confirmNovaOuReemissao.existente.numeroCertidao}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

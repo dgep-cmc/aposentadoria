@@ -27,7 +27,8 @@ import {
   ClipboardList,
   ShieldCheck,
   FileBadge,
-  Pencil
+  Pencil,
+  RotateCcw
 } from 'lucide-react';
 import {
   UnifiedSimulation,
@@ -45,6 +46,7 @@ import {
   getCertidoesEmitidas,
   excluirCertidaoEmitida
 } from '../utils/certidoesEmitidasStore';
+import { reemitirCertidaoRegistrada } from '../utils/certidaoBuilder';
 import { gerarCertidaoAposentadoriaPadraoPDF } from '../utils/exportCertidaoPDF';
 import {
   StepPessoais,
@@ -417,6 +419,23 @@ export default function ServidoresHub({
       setViewMode('dossie');
     }
     setEditCertIdToOpen(cert.id);
+  };
+
+  const handleReemitirCertidaoGeral = async (cert: CertidaoEmitida) => {
+    try {
+      const matchedServidor = servidores.find(s => certMatchesServidor(cert, s));
+      reemitirCertidaoRegistrada(cert, {
+        sim: matchedServidor || null,
+        atualizarComSimulacao: Boolean(matchedServidor),
+        novaDataHoje: false
+      });
+      await loadServidores();
+      showToast(
+        `Certidão (${cert.numeroCertidao}) reemitida mantendo o mesmo número e registro!`
+      );
+    } catch (e) {
+      showToast('Erro ao reemitir a certidão selecionada.', true);
+    }
   };
 
   if (viewMode === 'lista') {
@@ -1086,6 +1105,11 @@ export default function ServidoresHub({
                                   >
                                     {isOficial ? 'Oficial' : 'Minuta'}
                                   </span>
+                                  {(cert.reemissoes || 0) > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                                      Reemitida {cert.reemissoes}x
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="p-3">
@@ -1113,6 +1137,14 @@ export default function ServidoresHub({
                               </td>
                               <td className="p-3 text-right">
                                 <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReemitirCertidaoGeral(cert)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-lg transition-all cursor-pointer"
+                                    title="Reemitir esta certidão mantendo o mesmo número e registro"
+                                  >
+                                    <RotateCcw size={12} /> Reemitir
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => handleEditarCertidaoEmitida(cert)}

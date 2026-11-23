@@ -6,7 +6,10 @@ import {
   CertidaoEmitida, 
   salvarCertidaoEmitida, 
   consumirProximoNumeroOficial, 
-  getProximoNumeroOficial 
+  getProximoNumeroOficial,
+  registrarNumeroOficialConsumido,
+  findCertidaoOficialPorNumero,
+  reemitirCertidaoNoRegistro
 } from './certidoesEmitidasStore';
 
 const formatBR = (dateStr?: string) => {
@@ -678,14 +681,44 @@ export function emitirCertidaoSimulacao(sim: UnifiedSimulation, emitidoPor?: str
 
 /**
  * Emite uma Certidão Oficial com controle numérico sequencial e registra no histórico
+ * (se o número informado já estiver registrado para este tipo, atualiza o registro existente como reemissão).
  */
 export function emitirCertidaoOficial(sim: UnifiedSimulation, emitidoPor?: string, numeroDefinido?: string): CertidaoData {
   const proximoSugerido = getProximoNumeroOficial('aposentadoria');
   const numeroLimpo = (numeroDefinido || '').trim();
+
+  if (numeroLimpo && numeroLimpo !== 'SIMULAÇÃO' && numeroLimpo !== '03/2026') {
+    const existente = findCertidaoOficialPorNumero(numeroLimpo, 'aposentadoria');
+    if (existente) {
+      const certidaoData = construirCertidaoAPartirDeSimulacao(sim, {
+        tipo: 'oficial',
+        tipoCertidao: 'aposentadoria',
+        numeroPersonalizado: existente.numeroCertidao
+      });
+      const snapshotAtualizado: CertidaoData = {
+        ...certidaoData,
+        regrasTransitorias: {
+          ...certidaoData.regrasTransitorias,
+          recebeAbono: existente.snapshot?.regrasTransitorias?.recebeAbono ?? certidaoData.regrasTransitorias.recebeAbono,
+          dataAbono: existente.snapshot?.regrasTransitorias?.dataAbono || certidaoData.regrasTransitorias.dataAbono
+        },
+        lavratura: existente.snapshot?.lavratura?.servidorNome &&
+          existente.snapshot.lavratura.servidorNome !== 'Setor de Gestão de Processos e Benefícios Funcionais'
+          ? { ...existente.snapshot.lavratura, data: certidaoData.lavratura.data }
+          : certidaoData.lavratura
+      };
+      reemitirCertidaoNoRegistro(existente.id, snapshotAtualizado);
+      gerarCertidaoAposentadoriaPadraoPDF(snapshotAtualizado);
+      return snapshotAtualizado;
+    }
+  }
+
   const numero =
-    !numeroLimpo || numeroLimpo === 'SIMULAÇÃO' || numeroLimpo === proximoSugerido
+    !numeroLimpo || numeroLimpo === 'SIMULAÇÃO' || numeroLimpo === '03/2026' || numeroLimpo === proximoSugerido
       ? consumirProximoNumeroOficial('aposentadoria')
       : numeroLimpo;
+  registrarNumeroOficialConsumido('aposentadoria', numero);
+
   const certidaoData = construirCertidaoAPartirDeSimulacao(sim, { tipo: 'oficial', tipoCertidao: 'aposentadoria', numeroPersonalizado: numero });
 
   gerarCertidaoAposentadoriaPadraoPDF(certidaoData);
@@ -739,14 +772,44 @@ export function emitirCertidaoAbonoSimulacao(sim: UnifiedSimulation, emitidoPor?
 
 /**
  * Emite uma Certidão Oficial de Abono de Permanência com controle numérico sequencial
+ * (se o número informado já estiver registrado para abono, atualiza o registro existente como reemissão).
  */
 export function emitirCertidaoAbonoOficial(sim: UnifiedSimulation, emitidoPor?: string, numeroDefinido?: string): CertidaoData {
   const proximoSugerido = getProximoNumeroOficial('abono_permanencia');
   const numeroLimpo = (numeroDefinido || '').trim();
+
+  if (numeroLimpo && numeroLimpo !== 'SIMULAÇÃO' && numeroLimpo !== '03/2026') {
+    const existente = findCertidaoOficialPorNumero(numeroLimpo, 'abono_permanencia');
+    if (existente) {
+      const certidaoData = construirCertidaoAPartirDeSimulacao(sim, {
+        tipo: 'oficial',
+        tipoCertidao: 'abono_permanencia',
+        numeroPersonalizado: existente.numeroCertidao
+      });
+      const snapshotAtualizado: CertidaoData = {
+        ...certidaoData,
+        regrasTransitorias: {
+          ...certidaoData.regrasTransitorias,
+          recebeAbono: existente.snapshot?.regrasTransitorias?.recebeAbono ?? certidaoData.regrasTransitorias.recebeAbono,
+          dataAbono: existente.snapshot?.regrasTransitorias?.dataAbono || certidaoData.regrasTransitorias.dataAbono
+        },
+        lavratura: existente.snapshot?.lavratura?.servidorNome &&
+          existente.snapshot.lavratura.servidorNome !== 'Setor de Gestão de Processos e Benefícios Funcionais'
+          ? { ...existente.snapshot.lavratura, data: certidaoData.lavratura.data }
+          : certidaoData.lavratura
+      };
+      reemitirCertidaoNoRegistro(existente.id, snapshotAtualizado);
+      gerarCertidaoAposentadoriaPadraoPDF(snapshotAtualizado);
+      return snapshotAtualizado;
+    }
+  }
+
   const numero =
-    !numeroLimpo || numeroLimpo === 'SIMULAÇÃO' || numeroLimpo === proximoSugerido
+    !numeroLimpo || numeroLimpo === 'SIMULAÇÃO' || numeroLimpo === '03/2026' || numeroLimpo === proximoSugerido
       ? consumirProximoNumeroOficial('abono_permanencia')
       : numeroLimpo;
+  registrarNumeroOficialConsumido('abono_permanencia', numero);
+
   const certidaoData = construirCertidaoAPartirDeSimulacao(sim, { tipo: 'oficial', tipoCertidao: 'abono_permanencia', numeroPersonalizado: numero });
   gerarCertidaoAposentadoriaPadraoPDF(certidaoData);
 
@@ -768,4 +831,82 @@ export function emitirCertidaoAbonoOficial(sim: UnifiedSimulation, emitidoPor?: 
 
   salvarCertidaoEmitida(registro);
   return certidaoData;
+}
+
+/**
+ * Reemite uma certidão já existente mantendo EXATAMENTE seu número e registro no controle de emissões,
+ * podendo atualizar os dados a partir da simulação atual ou manter os dados originais.
+ */
+export function reemitirCertidaoRegistrada(
+  certOriginal: CertidaoEmitida,
+  options?: {
+    sim?: UnifiedSimulation;
+    atualizarComSimulacao?: boolean;
+    snapshotCustomizado?: CertidaoData;
+    novaDataHoje?: boolean;
+  }
+): CertidaoEmitida | null {
+  const tipoCertidao =
+    certOriginal.snapshot?.tipoCertidao === 'abono_permanencia' ||
+    (certOriginal.cargo || '').toLowerCase().includes('abono de permanência')
+      ? 'abono_permanencia'
+      : 'aposentadoria';
+  const tipoNatureza = certOriginal.tipo === 'simulacao' ? 'simulacao' : 'oficial';
+  const hoje = new Date();
+  const hojeStr = formatDateObjBR(hoje);
+  const hojeExtenso = `${hoje.getDate()} de ${hoje.toLocaleDateString('pt-BR', { month: 'long' })} de ${hoje.getFullYear()}`;
+
+  let snapshotFinal: CertidaoData;
+  if (options?.snapshotCustomizado) {
+    snapshotFinal = {
+      ...options.snapshotCustomizado,
+      numeroCertidao: tipoNatureza === 'simulacao' ? 'SIMULAÇÃO' : certOriginal.numeroCertidao,
+      isSimulacao: tipoNatureza === 'simulacao',
+      tipoCertidao
+    };
+  } else if (options?.atualizarComSimulacao && options?.sim) {
+    const reconstruida = construirCertidaoAPartirDeSimulacao(options.sim, {
+      tipo: tipoNatureza,
+      tipoCertidao,
+      numeroPersonalizado: tipoNatureza === 'simulacao' ? 'SIMULAÇÃO' : certOriginal.numeroCertidao,
+      dataCertidaoPersonalizada: options?.novaDataHoje ? hojeStr : certOriginal.dataCertidao
+    });
+    const lavraturaOrig = certOriginal.snapshot?.lavratura;
+    const isLavraturaCustom =
+      lavraturaOrig?.servidorNome &&
+      lavraturaOrig.servidorNome !== 'Setor de Gestão de Processos e Benefícios Funcionais';
+    snapshotFinal = {
+      ...reconstruida,
+      regrasTransitorias: {
+        ...reconstruida.regrasTransitorias,
+        recebeAbono:
+          certOriginal.snapshot?.regrasTransitorias?.recebeAbono ?? reconstruida.regrasTransitorias.recebeAbono,
+        dataAbono:
+          certOriginal.snapshot?.regrasTransitorias?.dataAbono || reconstruida.regrasTransitorias.dataAbono
+      },
+      lavratura: isLavraturaCustom
+        ? { ...lavraturaOrig, data: reconstruida.lavratura.data }
+        : reconstruida.lavratura
+    };
+  } else {
+    snapshotFinal = {
+      ...certOriginal.snapshot,
+      numeroCertidao: tipoNatureza === 'simulacao' ? 'SIMULAÇÃO' : certOriginal.numeroCertidao,
+      isSimulacao: tipoNatureza === 'simulacao',
+      tipoCertidao,
+      ...(options?.novaDataHoje
+        ? {
+            dataCertidao: hojeStr,
+            lavratura: {
+              ...certOriginal.snapshot.lavratura,
+              data: hojeExtenso
+            }
+          }
+        : {})
+    };
+  }
+
+  const updated = reemitirCertidaoNoRegistro(certOriginal.id, snapshotFinal);
+  gerarCertidaoAposentadoriaPadraoPDF(updated ? updated.snapshot : snapshotFinal);
+  return updated;
 }

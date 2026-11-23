@@ -27,7 +27,8 @@ import {
   History,
   FileCheck,
   Download,
-  Pencil
+  Pencil,
+  RotateCcw
 } from 'lucide-react';
 import { 
   UnifiedSimulation, 
@@ -45,14 +46,16 @@ import {
   emitirCertidaoAbonoSimulacao,
   emitirCertidaoAbonoOficial,
   construirCertidaoAPartirDeSimulacao,
-  extrairPeriodosDeCompetencias
+  extrairPeriodosDeCompetencias,
+  reemitirCertidaoRegistrada
 } from '../utils/certidaoBuilder';
 import { 
   CertidaoEmitida, 
   getCertidoesEmitidas, 
   getProximoNumeroOficial, 
   excluirCertidaoEmitida,
-  atualizarCertidaoEmitida
+  atualizarCertidaoEmitida,
+  findCertidaoOficialPorServidor
 } from '../utils/certidoesEmitidasStore';
 import { gerarCertidaoAposentadoriaPadraoPDF } from '../utils/exportCertidaoPDF';
 
@@ -1961,10 +1964,10 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
 
   const handleConfirmarEmissaoOficial = () => {
     try {
-      emitirCertidaoOficial(sim, undefined, numeroOficialInput);
+      const emitida = emitirCertidaoOficial(sim, undefined, numeroOficialInput);
       carregarHistorico();
       setShowModalCertidaoOficial(false);
-      showNotification(`Certidão Oficial nº ${numeroOficialInput} emitida com sucesso e registrada no controle!`);
+      showNotification(`Certidão Oficial nº ${emitida.numeroCertidao} emitida com sucesso e registrada no controle!`);
     } catch (e) {
       console.error(e);
       showNotification('Erro ao emitir Certidão Oficial');
@@ -1973,13 +1976,30 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
 
   const handleConfirmarEmissaoAbonoOficial = () => {
     try {
-      emitirCertidaoAbonoOficial(sim, undefined, numeroOficialInput);
+      const emitida = emitirCertidaoAbonoOficial(sim, undefined, numeroOficialInput);
       carregarHistorico();
       setShowModalAbonoOficial(false);
-      showNotification(`Certidão Oficial de Abono de Permanência nº ${numeroOficialInput} emitida com sucesso!`);
+      showNotification(`Certidão Oficial de Abono de Permanência nº ${emitida.numeroCertidao} emitida com sucesso!`);
     } catch (e) {
       console.error(e);
       showNotification('Erro ao emitir Certidão de Abono de Permanência');
+    }
+  };
+
+  const handleReemitirCertidao = (doc: CertidaoEmitida, atualizarComSim = true) => {
+    try {
+      const mesmoServidor =
+        (sim.matricula && doc.matricula && sim.matricula.trim() === doc.matricula.trim()) ||
+        (sim.nome && doc.servidorNome && sim.nome.trim().toLowerCase() === doc.servidorNome.trim().toLowerCase());
+      reemitirCertidaoRegistrada(doc, {
+        sim: mesmoServidor ? sim : undefined,
+        atualizarComSimulacao: Boolean(atualizarComSim && mesmoServidor)
+      });
+      carregarHistorico();
+      showNotification(`Certidão (${doc.numeroCertidao}) reemitida com sucesso mantendo o mesmo registro e numeração!`);
+    } catch (e) {
+      console.error(e);
+      showNotification('Erro ao reemitir a certidão.');
     }
   };
 
@@ -4112,6 +4132,14 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
+                            onClick={() => handleReemitirCertidao(doc, true)}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Reemitir atualizando com os dados da simulação e mantendo o mesmo número"
+                          >
+                            <RotateCcw size={11} /> Reemitir
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleAbrirEdicaoHistCert(doc)}
                             className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             title="Editar dados da certidão sem alterar a contagem"
@@ -4130,7 +4158,7 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                             }}
                             className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                           >
-                            <Download size={11} /> Baixar Novamente
+                            <Download size={11} /> PDF
                           </button>
                         </div>
                       </div>
@@ -4193,9 +4221,36 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
               <span className="text-gray-600 block">Cargo: {getCareerDisplayName(sim.cargo || sim.selectedCareer)}</span>
             </div>
 
+            {(() => {
+              const jaExisteApos = findCertidaoOficialPorServidor({
+                matricula: sim.matricula,
+                servidorNome: sim.nome,
+                tipoCertidao: 'aposentadoria'
+              });
+              if (!jaExisteApos) return null;
+              return (
+                <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-xl space-y-2 text-xs">
+                  <div className="text-emerald-950">
+                    <strong>Certidão já emitida:</strong> Este servidor já possui a Certidão Oficial nº{' '}
+                    <strong className="font-mono">{jaExisteApos.numeroCertidao}</strong> ({jaExisteApos.dataCertidao}).
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleReemitirCertidao(jaExisteApos, true);
+                      setShowModalCertidaoOficial(false);
+                    }}
+                    className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Reemitir Nº {jaExisteApos.numeroCertidao} (Atualizar registro atual)
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-700">
-                Número Sequencial da Certidão de Aposentadoria
+                Número Sequencial da Certidão de Aposentadoria (Nova Emissão)
               </label>
               <input
                 type="text"
@@ -4222,7 +4277,7 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                 onClick={handleConfirmarEmissaoOficial}
                 className="px-4 py-2 bg-[#002f5a] hover:bg-[#004b8d] text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
               >
-                <Download size={14} /> Confirmar & Gerar PDF
+                <Download size={14} /> Confirmar Nova & Gerar PDF
               </button>
             </div>
           </div>
@@ -4257,9 +4312,36 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
               <span className="text-gray-600 block">Cargo: {getCareerDisplayName(sim.cargo || sim.selectedCareer)}</span>
             </div>
 
+            {(() => {
+              const jaExisteAbono = findCertidaoOficialPorServidor({
+                matricula: sim.matricula,
+                servidorNome: sim.nome,
+                tipoCertidao: 'abono_permanencia'
+              });
+              if (!jaExisteAbono) return null;
+              return (
+                <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-xl space-y-2 text-xs">
+                  <div className="text-emerald-950">
+                    <strong>Abono já emitido:</strong> Este servidor já possui a Certidão Oficial de Abono nº{' '}
+                    <strong className="font-mono">{jaExisteAbono.numeroCertidao}</strong> ({jaExisteAbono.dataCertidao}).
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleReemitirCertidao(jaExisteAbono, true);
+                      setShowModalAbonoOficial(false);
+                    }}
+                    className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Reemitir Nº {jaExisteAbono.numeroCertidao} (Atualizar registro atual)
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-700">
-                Número Sequencial da Certidão de Abono de Permanência
+                Número Sequencial da Certidão de Abono de Permanência (Nova Emissão)
               </label>
               <input
                 type="text"
@@ -4283,7 +4365,7 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                 onClick={handleConfirmarEmissaoAbonoOficial}
                 className="px-4 py-2 bg-[#581c87] hover:bg-[#4c1d95] text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
               >
-                <Download size={14} /> Confirmar & Gerar PDF Abono
+                <Download size={14} /> Confirmar Nova & Gerar PDF Abono
               </button>
             </div>
           </div>
@@ -4336,6 +4418,14 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleReemitirCertidao(item, true)}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Reemitir mantendo o mesmo número e registro"
+                      >
+                        <RotateCcw size={13} /> Reemitir
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleAbrirEdicaoHistCert(item)}
