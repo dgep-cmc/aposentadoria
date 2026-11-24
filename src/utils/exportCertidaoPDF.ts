@@ -109,12 +109,16 @@ const formatNumber = (val: number | undefined): string => {
   return val.toLocaleString('pt-BR');
 };
 
-const COLOR_PRIMARY: [number, number, number] = [0, 47, 90];      // Azul CMC Institucional (#002F5A)
-const COLOR_TEXT: [number, number, number] = [20, 25, 35];        // Preto/grafite institucional
-const COLOR_SUBTEXT: [number, number, number] = [71, 85, 105];    // Subtítulos e metadados
-const COLOR_BORDER: [number, number, number] = [195, 204, 218];   // Bordas suaves
-const COLOR_HIGHLIGHT: [number, number, number] = [240, 245, 252];// Fundo destaque subtotal
-const COLOR_TOTAL: [number, number, number] = [226, 239, 251];    // Fundo destaque total geral
+const COLOR_PRIMARY: [number, number, number] = [33, 102, 166];     // Azul Institucional Médio Harmônico (#2166A6)
+const COLOR_ACCENT: [number, number, number] = [43, 114, 179];     // Azul destaque secundário (#2B72B3)
+const COLOR_TEXT: [number, number, number] = [15, 23, 42];        // Slate 900 institucional
+const COLOR_BODY: [number, number, number] = [30, 41, 59];        // Slate 800 para corpo/tabelas
+const COLOR_SUBTEXT: [number, number, number] = [71, 85, 105];    // Slate 600 para subtítulos e metadados
+const COLOR_LABEL: [number, number, number] = [100, 116, 139];    // Slate 500 para rótulos
+const COLOR_BORDER: [number, number, number] = [214, 223, 235];   // Bordas cool slate suaves
+const COLOR_ZEBRA: [number, number, number] = [248, 250, 252];    // Slate 50 para zebra sutil
+const COLOR_HIGHLIGHT: [number, number, number] = [241, 247, 253];// Fundo destaque subtotal
+const COLOR_TOTAL: [number, number, number] = [225, 238, 251];    // Fundo destaque total geral
 
 /**
  * Renderiza o bloco padronizado de Lavratura e Assinatura Institucional DGEP/CMC
@@ -206,17 +210,17 @@ function aplicarRodapesPaginados(
     }
 
     // Linha divisória do rodapé
-    doc.setDrawColor(215, 222, 232);
+    doc.setDrawColor(...COLOR_BORDER);
     doc.setLineWidth(0.25);
     doc.line(margin, pageHeight - 10.5, pageWidth - margin, pageHeight - 10.5);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.9);
-    doc.setTextColor(95, 103, 115);
+    doc.setTextColor(...COLOR_LABEL);
     doc.text(leftTextBuilder(i, totalPages), margin, pageHeight - 6.2);
 
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(71, 85, 105);
+    doc.setTextColor(...COLOR_SUBTEXT);
     doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6.2, { align: 'right' });
   }
 }
@@ -272,9 +276,9 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
 
   doc.addImage(CMC_LOGO_BASE64, 'PNG', margin, currentY, logoW, logoH);
 
-  // Linha vertical divisória cinza sutil
+  // Linha vertical divisória cool slate sutil
   const divX = margin + logoW + 4.5;
-  doc.setDrawColor(226, 232, 240);
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.35);
   doc.line(divX, currentY + 1.0, divX, currentY + logoH - 0.5);
 
@@ -287,7 +291,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.0);
-  doc.setTextColor(82, 92, 106);
+  doc.setTextColor(...COLOR_SUBTEXT);
   doc.text('Setor de Gestão de Processos e Benefícios Funcionais', textX, currentY + 10.6);
 
   // Linha divisória inferior do cabeçalho (#002f5a)
@@ -299,21 +303,24 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   currentY = headerBottomLineY + (isUltraCompact ? 2.8 : 3.5);
 
   // -----------------------------------------------------------------
-  // 2. FAIXA TÍTULO DA CERTIDÃO (CAIXA ARREDONDADA COMO NA PRÉVIA)
+  // 2. FAIXA TÍTULO DA CERTIDÃO (PALETA HARMÔNICA INSTITUCIONAL)
   // -----------------------------------------------------------------
   const titleBannerH = 9.0;
-  let bannerBg: [number, number, number] = [240, 244, 248]; // #f0f4f8
-  let bannerBorder: [number, number, number] = [185, 207, 228];
+  let bannerBg: [number, number, number] = [240, 246, 253]; // Azul gelo claro (#F0F6FD)
+  let bannerBorder: [number, number, number] = [190, 214, 238];
   let bannerTextColor: [number, number, number] = COLOR_PRIMARY;
+  let bannerMetaColor: [number, number, number] = COLOR_SUBTEXT;
 
   if (isSimulacao) {
-    bannerBg = [255, 251, 235];
-    bannerBorder = [252, 211, 77];
-    bannerTextColor = [146, 64, 14];
+    bannerBg = [254, 249, 238];     // Âmbar suave institucional (#FEF9EE)
+    bannerBorder = [230, 198, 134];
+    bannerTextColor = [130, 74, 18];
+    bannerMetaColor = [120, 82, 34];
   } else if (isAbono) {
-    bannerBg = [250, 245, 255]; // bg-purple-50
-    bannerBorder = [216, 180, 254]; // border-purple-300
-    bannerTextColor = [59, 7, 100]; // text-purple-950
+    bannerBg = [238, 248, 248];     // Azul-petróleo suave (#EEF8F8), harmônico com o azul institucional
+    bannerBorder = [174, 214, 214];
+    bannerTextColor = [21, 94, 99];
+    bannerMetaColor = [50, 106, 111];
   }
 
   doc.setFillColor(...bannerBg);
@@ -333,6 +340,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
     doc.text(tituloMinuta, margin + 3.8, bannerMidY);
 
     doc.setFontSize(7.6);
+    doc.setTextColor(...bannerMetaColor);
     doc.text(`SEM CONTROLE NUMÉRICO  •  Data da certidão: ${data.dataCertidao}`, pageWidth - margin - 3.8, bannerMidY, {
       align: 'right'
     });
@@ -342,16 +350,16 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
       : `CERTIDÃO DE APOSENTADORIA Nº ${data.numeroCertidao.toUpperCase()}`;
     doc.text(tituloOficial, margin + 3.8, bannerMidY);
 
-    // Data à direita
+    // Data à direita harmônica com a faixa
     const dateLabel = 'Data da certidão: ';
     const dateVal = data.dataCertidao || '';
     doc.setFontSize(7.7);
     const valW = doc.setFont('helvetica', 'bold').getTextWidth(dateVal);
     const rightEdge = pageWidth - margin - 3.8;
-    doc.setTextColor(55, 65, 81);
+    doc.setTextColor(...bannerTextColor);
     doc.text(dateVal, rightEdge, bannerMidY, { align: 'right' });
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(75, 85, 99);
+    doc.setTextColor(...bannerMetaColor);
     doc.text(dateLabel, rightEdge - valW, bannerMidY, { align: 'right' });
   }
 
@@ -410,7 +418,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   const cardServidorH = padTop * 2 + r1H + r2H + r3H + r4H + rowGap * 3 - 0.8;
 
   doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(226, 232, 240);
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.28);
   doc.roundedRect(margin, currentY, contentWidth, cardServidorH, 1.8, 1.8, 'FD');
 
@@ -423,12 +431,12 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   ) => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(lblFont);
-    doc.setTextColor(107, 114, 128);
+    doc.setTextColor(...COLOR_LABEL);
     doc.text(label, x, y);
 
     doc.setFont('helvetica', opts?.fontStyle || 'bold');
     doc.setFontSize(valFont);
-    doc.setTextColor(...(opts?.color || [17, 24, 39]));
+    doc.setTextColor(...(opts?.color || COLOR_TEXT));
     doc.text(lines, x, y + 3.4);
   };
 
@@ -441,10 +449,10 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   drawField(baseX + col50 + col25, cardY, 'CPF', r1Cpf);
   cardY += r1H + rowGap;
 
-  // Linha 2: NASCIMENTO | SEXO | MATRÍCULA (azul) | IDADE HOJE
+  // Linha 2: NASCIMENTO | SEXO | MATRÍCULA (azul institucional) | IDADE HOJE
   drawField(baseX, cardY, 'NASCIMENTO', r2Nasc);
   drawField(baseX + col25, cardY, 'SEXO', r2Sexo, { fontStyle: 'bold' });
-  drawField(baseX + col50, cardY, 'MATRÍCULA', r2Mat, { color: [0, 75, 141] });
+  drawField(baseX + col50, cardY, 'MATRÍCULA', r2Mat, { color: COLOR_ACCENT });
   drawField(baseX + col50 + col25, cardY, 'IDADE HOJE', r2Idade);
   cardY += r2H + rowGap;
 
@@ -456,7 +464,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
 
   // Linha 4: REGISTRO DE ADMISSÃO TCE-PR
   drawField(baseX, cardY, 'REGISTRO DE ADMISSÃO TCE-PR', r4Tce, {
-    color: [31, 41, 55],
+    color: COLOR_BODY,
     fontStyle: 'bolditalic'
   });
 
@@ -472,11 +480,19 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
     item: TempoItem,
     isTotal = false,
     isSubtotal = false,
-    subtext?: string
+    subtext?: string,
+    rowIndex = 0
   ) => {
     const isHighlight = isTotal || isSubtotal;
-    const bgFill = isTotal ? COLOR_TOTAL : isSubtotal ? COLOR_HIGHLIGHT : undefined;
-    const txtColor: [number, number, number] = isHighlight ? COLOR_PRIMARY : [31, 41, 55];
+    const isZebra = !isHighlight && rowIndex % 2 === 1;
+    const rowFill: [number, number, number] = isTotal
+      ? COLOR_TOTAL
+      : isSubtotal
+        ? COLOR_HIGHLIGHT
+        : isZebra
+          ? COLOR_ZEBRA
+          : [255, 255, 255];
+    const txtColor: [number, number, number] = isHighlight ? COLOR_PRIMARY : COLOR_BODY;
     const rowFontSize = isTotal ? tblFontSize + 0.3 : isSubtotal ? tblFontSize + 0.1 : tblFontSize;
 
     // Quando há subtext (períodos INSS), colocamos espaço extra via lines vazias e desenhamos com estilo próprio no didDrawCell
@@ -491,12 +507,13 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
         content: cellContent,
         _mainTitle: subtext ? descricao : undefined,
         _subtext: subtext || undefined,
+        _rowFill: rowFill,
         _isTotal: isTotal,
         _isSubtotal: isSubtotal,
         styles: {
           fontStyle: isHighlight ? 'bold' : 'normal',
-          fillColor: bgFill as any,
-          textColor: subtext ? ([255, 255, 255] as [number, number, number]) : txtColor,
+          fillColor: rowFill,
+          textColor: subtext ? rowFill : txtColor,
           fontSize: rowFontSize
         }
       },
@@ -507,8 +524,8 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
         styles: {
           halign: 'center',
           fontStyle: isHighlight ? 'bold' : 'normal',
-          fillColor: bgFill as any,
-          textColor: isHighlight ? COLOR_PRIMARY : [55, 65, 81],
+          fillColor: rowFill,
+          textColor: isHighlight ? COLOR_PRIMARY : COLOR_SUBTEXT,
           fontSize: rowFontSize
         }
       },
@@ -519,8 +536,8 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
         styles: {
           halign: 'center',
           fontStyle: isHighlight ? 'bold' : 'normal',
-          fillColor: bgFill as any,
-          textColor: isHighlight ? COLOR_PRIMARY : [55, 65, 81],
+          fillColor: rowFill,
+          textColor: isHighlight ? COLOR_PRIMARY : COLOR_SUBTEXT,
           fontSize: rowFontSize
         }
       },
@@ -531,8 +548,8 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
         styles: {
           halign: 'center',
           fontStyle: isHighlight ? 'bold' : 'normal',
-          fillColor: bgFill as any,
-          textColor: isHighlight ? COLOR_PRIMARY : [55, 65, 81],
+          fillColor: rowFill,
+          textColor: isHighlight ? COLOR_PRIMARY : COLOR_SUBTEXT,
           fontSize: rowFontSize
         }
       },
@@ -543,8 +560,8 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
         styles: {
           halign: 'right',
           fontStyle: 'bold',
-          fillColor: bgFill as any,
-          textColor: isSubtotal ? ([0, 85, 153] as [number, number, number]) : isTotal ? COLOR_PRIMARY : [17, 24, 39],
+          fillColor: rowFill,
+          textColor: isSubtotal ? COLOR_ACCENT : isTotal ? COLOR_PRIMARY : COLOR_TEXT,
           fontSize: rowFontSize
         }
       }
@@ -554,30 +571,40 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   const gradeTableBody = [
     formatItemRow(
       `Tempo Estatutário na CMC ${g.tempoEstatutarioCMC.periodoDesc ? `(${g.tempoEstatutarioCMC.periodoDesc.replace(/^\(|\)$/g, '')}):` : ':'}`,
-      g.tempoEstatutarioCMC
+      g.tempoEstatutarioCMC,
+      false,
+      false,
+      undefined,
+      0
     ),
-    formatItemRow('Tempo Fícto (licenças-prêmio incorporadas – CMC):', g.tempoFictoLicencaPremio),
-    formatItemRow('Tempo de Serviço Público Municipal (Recibado) incorporado:', g.tempoServicoPublicoRecibado),
+    formatItemRow('Tempo Fícto (licenças-prêmio incorporadas – CMC):', g.tempoFictoLicencaPremio, false, false, undefined, 1),
+    formatItemRow('Tempo de Serviço Público Municipal (Recibado) incorporado:', g.tempoServicoPublicoRecibado, false, false, undefined, 2),
     formatItemRow(
       `Tempo de Serviço Público Municipal (CLT) incorporado ${g.tempoServicoPublicoCLT.periodoDesc ? `(${g.tempoServicoPublicoCLT.periodoDesc.replace(/^\(|\)$/g, '')}):` : ':'}`,
-      g.tempoServicoPublicoCLT
+      g.tempoServicoPublicoCLT,
+      false,
+      false,
+      undefined,
+      3
     ),
-    formatItemRow('Outras incorporações de Tempo de Serviço Público (Estatutário):', g.outrasIncorporacoesEstatutario),
-    formatItemRow('Outras incorporações de Tempo de Serviço Público (CLT):', g.outrasIncorporacoesCLT),
-    formatItemRow('Afastamentos sem vencimento:', g.afastamentosSemVencimento),
-    formatItemRow('Penalidades Administrativas, suspensão e faltas:', g.penalidadesAdministrativas),
-    formatItemRow('Tempo Total de Serviço Público:', g.tempoTotalServicoPublico, false, true),
+    formatItemRow('Outras incorporações de Tempo de Serviço Público (Estatutário):', g.outrasIncorporacoesEstatutario, false, false, undefined, 4),
+    formatItemRow('Outras incorporações de Tempo de Serviço Público (CLT):', g.outrasIncorporacoesCLT, false, false, undefined, 5),
+    formatItemRow('Afastamentos sem vencimento:', g.afastamentosSemVencimento, false, false, undefined, 6),
+    formatItemRow('Penalidades Administrativas, suspensão e faltas:', g.penalidadesAdministrativas, false, false, undefined, 7),
+    formatItemRow('Tempo Total de Serviço Público:', g.tempoTotalServicoPublico, false, true, undefined, 8),
     formatItemRow(
       'Tempo de Contribuição na iniciativa privada incorporado (INSS)',
       g.tempoINSSPrivada,
       false,
       false,
-      inssDescStr || undefined
+      inssDescStr || undefined,
+      9
     ),
-    formatItemRow('Tempo Total de Serviço/Contribuição:', g.tempoTotalServicoContribuicao, true, false)
+    formatItemRow('Tempo Total de Serviço/Contribuição:', g.tempoTotalServicoContribuicao, true, false, undefined, 10)
   ];
 
   const gradeStartY = currentY;
+  let gradeHeadEndY = gradeStartY;
   // Colunas: [118, 16, 16, 16, 20] = 186 mm
   autoTable(doc, {
     startY: gradeStartY,
@@ -596,7 +623,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
     styles: {
       fontSize: tblFontSize,
       cellPadding: { top: tblPadY, bottom: tblPadY, left: 2.4, right: 2.4 },
-      textColor: [31, 41, 55],
+      textColor: COLOR_BODY,
       valign: 'middle'
     },
     headStyles: {
@@ -614,41 +641,46 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
       4: { cellWidth: 20 }
     },
     didDrawCell: (hookData) => {
+      if (hookData.section === 'head') {
+        gradeHeadEndY = Math.max(gradeHeadEndY, hookData.cell.y + hookData.cell.height);
+        return;
+      }
       if (hookData.section !== 'body') return;
       const cell = hookData.cell;
       const raw = cell.raw as any;
 
-      // Renderiza linha do INSS com título normal + períodos em cinza menor (como na prévia)
+      // Renderiza linha do INSS com fundo idêntico ao da linha + título + períodos em slate legível
       if (hookData.column.index === 0 && raw?._mainTitle && raw?._subtext) {
-        doc.setFillColor(255, 255, 255);
-        doc.rect(cell.x + 0.3, cell.y + 0.3, cell.width - 0.6, cell.height - 0.6, 'F');
+        const bg: [number, number, number] = raw._rowFill || [255, 255, 255];
+        doc.setFillColor(...bg);
+        doc.rect(cell.x + 0.2, cell.y + 0.2, cell.width - 0.4, cell.height - 0.4, 'F');
 
         const innerTextX = cell.x + 2.4;
         const mainY = cell.y + tblPadY + 2.5;
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(tblFontSize);
-        doc.setTextColor(31, 41, 55);
+        doc.setTextColor(...COLOR_BODY);
         doc.text(raw._mainTitle, innerTextX, mainY);
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.4);
-        doc.setTextColor(107, 114, 128);
-        const subLines = doc.splitTextToSize(raw._subtext, cell.width - 4.8) as string[];
+        doc.setTextColor(...COLOR_SUBTEXT);
+        const subLines = doc.splitTextToSize(raw._subtext, 112) as string[];
         doc.text(subLines, innerTextX, mainY + 3.0);
       }
 
-      // Bordas horizontais sutis entre linhas (sem grade vertical pesada)
+      // Bordas horizontais sutis em slate harmônico
       if (raw?._isTotal) {
         doc.setDrawColor(...COLOR_PRIMARY);
         doc.setLineWidth(0.45);
         doc.line(cell.x, cell.y, cell.x + cell.width, cell.y);
       } else if (raw?._isSubtotal) {
-        doc.setDrawColor(191, 219, 254);
+        doc.setDrawColor(190, 210, 232);
         doc.setLineWidth(0.25);
         doc.line(cell.x, cell.y, cell.x + cell.width, cell.y);
         doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
       } else {
-        doc.setDrawColor(229, 231, 235);
+        doc.setDrawColor(226, 232, 240);
         doc.setLineWidth(0.15);
         doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
       }
@@ -656,33 +688,41 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   });
 
   const gradeEndY = (doc as any).lastAutoTable.finalY;
-  // Borda externa limpa da tabela
-  doc.setDrawColor(226, 232, 240);
+  // Borda externa limpa apenas na área do corpo (sem cortar os cantos do cabeçalho azul-marinho)
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.28);
-  doc.rect(margin, gradeStartY, contentWidth, gradeEndY - gradeStartY, 'S');
+  doc.line(margin, gradeHeadEndY, margin, gradeEndY);
+  doc.line(margin + contentWidth, gradeHeadEndY, margin + contentWidth, gradeEndY);
+  doc.line(margin, gradeEndY, margin + contentWidth, gradeEndY);
 
   currentY = gradeEndY + sectionGap;
 
   // -----------------------------------------------------------------
-  // BLOCO 3: TEMPOS DE EXERCÍCIO (CABEÇALHO CINZA CLARO COMO NA PRÉVIA)
+  // BLOCO 3: TEMPOS DE EXERCÍCIO (CABEÇALHO SLATE-AZUL HARMÔNICO)
   // -----------------------------------------------------------------
   drawSectionHeading('3. TEMPOS DE EXERCÍCIO');
 
   const te = data.temposExercicio;
   const temposExercicioBody = [
     [
-      { content: `Tempo de serviço público ${te.servicoPublicoTotal.periodoDesc ? `(${te.servicoPublicoTotal.periodoDesc})` : ''}` },
-      { content: String(te.servicoPublicoTotal.anos), styles: { halign: 'center' } },
-      { content: String(te.servicoPublicoTotal.meses), styles: { halign: 'center' } },
-      { content: String(te.servicoPublicoTotal.dias), styles: { halign: 'center' } },
-      { content: formatNumber(te.servicoPublicoTotal.totalDias), styles: { halign: 'right', fontStyle: 'bold', textColor: [31, 41, 55] } }
+      {
+        content: `Tempo de serviço público ${te.servicoPublicoTotal.periodoDesc ? `(${te.servicoPublicoTotal.periodoDesc})` : ''}`,
+        styles: { fillColor: [255, 255, 255] as [number, number, number] }
+      },
+      { content: String(te.servicoPublicoTotal.anos), styles: { halign: 'center', fillColor: [255, 255, 255] as [number, number, number], textColor: COLOR_SUBTEXT } },
+      { content: String(te.servicoPublicoTotal.meses), styles: { halign: 'center', fillColor: [255, 255, 255] as [number, number, number], textColor: COLOR_SUBTEXT } },
+      { content: String(te.servicoPublicoTotal.dias), styles: { halign: 'center', fillColor: [255, 255, 255] as [number, number, number], textColor: COLOR_SUBTEXT } },
+      { content: formatNumber(te.servicoPublicoTotal.totalDias), styles: { halign: 'right', fontStyle: 'bold', fillColor: [255, 255, 255] as [number, number, number], textColor: COLOR_TEXT } }
     ],
     [
-      { content: `Tempo no cargo efetivo ${te.cargoEfetivoTotal.periodoDesc ? `(${te.cargoEfetivoTotal.periodoDesc})` : ''}` },
-      { content: String(te.cargoEfetivoTotal.anos), styles: { halign: 'center' } },
-      { content: String(te.cargoEfetivoTotal.meses), styles: { halign: 'center' } },
-      { content: String(te.cargoEfetivoTotal.dias), styles: { halign: 'center' } },
-      { content: formatNumber(te.cargoEfetivoTotal.totalDias), styles: { halign: 'right', fontStyle: 'bold', textColor: [31, 41, 55] } }
+      {
+        content: `Tempo no cargo efetivo ${te.cargoEfetivoTotal.periodoDesc ? `(${te.cargoEfetivoTotal.periodoDesc})` : ''}`,
+        styles: { fillColor: COLOR_ZEBRA }
+      },
+      { content: String(te.cargoEfetivoTotal.anos), styles: { halign: 'center', fillColor: COLOR_ZEBRA, textColor: COLOR_SUBTEXT } },
+      { content: String(te.cargoEfetivoTotal.meses), styles: { halign: 'center', fillColor: COLOR_ZEBRA, textColor: COLOR_SUBTEXT } },
+      { content: String(te.cargoEfetivoTotal.dias), styles: { halign: 'center', fillColor: COLOR_ZEBRA, textColor: COLOR_SUBTEXT } },
+      { content: formatNumber(te.cargoEfetivoTotal.totalDias), styles: { halign: 'right', fontStyle: 'bold', fillColor: COLOR_ZEBRA, textColor: COLOR_TEXT } }
     ]
   ];
 
@@ -704,12 +744,12 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
     styles: {
       fontSize: tblFontSize,
       cellPadding: { top: tblPadY, bottom: tblPadY, left: 2.4, right: 2.4 },
-      textColor: [31, 41, 55],
+      textColor: COLOR_BODY,
       valign: 'middle'
     },
     headStyles: {
-      fillColor: [243, 244, 246], // bg-gray-100 igual à prévia
-      textColor: [55, 65, 81],
+      fillColor: [238, 244, 251], // Slate-azul suave harmônico com o azul institucional
+      textColor: COLOR_PRIMARY,
       fontStyle: 'bold',
       fontSize: tblFontSize - 0.1,
       cellPadding: { top: tblHeadPadY - 0.15, bottom: tblHeadPadY - 0.15, left: 2.4, right: 2.4 }
@@ -722,9 +762,13 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
       4: { cellWidth: 20 }
     },
     didDrawCell: (hookData) => {
-      if (hookData.section === 'body' && hookData.row.index === 0) {
-        const c = hookData.cell;
-        doc.setDrawColor(229, 231, 235);
+      const c = hookData.cell;
+      if (hookData.section === 'head') {
+        doc.setDrawColor(196, 209, 224);
+        doc.setLineWidth(0.22);
+        doc.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height);
+      } else if (hookData.section === 'body' && hookData.row.index === 0) {
+        doc.setDrawColor(226, 232, 240);
         doc.setLineWidth(0.15);
         doc.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height);
       }
@@ -732,7 +776,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   });
 
   const teEndY = (doc as any).lastAutoTable.finalY;
-  doc.setDrawColor(226, 232, 240);
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.28);
   doc.rect(margin, teStartY, contentWidth, teEndY - teStartY, 'S');
 
@@ -744,35 +788,42 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   const rt = data.regrasTransitorias;
   const infoCardH = isUltraCompact ? 16.5 : 18.2;
 
-  doc.setFillColor(249, 250, 251);
-  doc.setDrawColor(226, 232, 240);
+  doc.setFillColor(...COLOR_ZEBRA);
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.28);
   doc.roundedRect(margin, currentY, contentWidth, infoCardH, 1.5, 1.5, 'FD');
+
+  // Divisória vertical sutil entre as duas colunas
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.22);
+  doc.line(margin + contentWidth / 2 - 0.5, currentY + 3.0, margin + contentWidth / 2 - 0.5, currentY + infoCardH - 3.0);
 
   const drawLabelBoldSuffix = (x: number, y: number, prefix: string, boldPart: string, suffix = '') => {
     doc.setFontSize(tblFontSize);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(31, 41, 55);
+    doc.setTextColor(...COLOR_SUBTEXT);
     doc.text(prefix, x, y);
     const w1 = doc.getTextWidth(prefix);
 
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLOR_TEXT);
     doc.text(boldPart, x + w1, y);
     if (suffix) {
       const w2 = doc.getTextWidth(boldPart);
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLOR_SUBTEXT);
       doc.text(suffix, x + w1 + w2, y);
     }
   };
 
   const colLeftX = margin + 4.0;
-  const colRightX = margin + contentWidth / 2 + 2.5;
+  const colRightX = margin + contentWidth / 2 + 3.0;
   const infoTitleY = currentY + 4.4;
 
   // Coluna esquerda
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.8);
-  doc.setTextColor(55, 65, 81);
+  doc.setTextColor(...COLOR_PRIMARY);
   doc.text('OUTRAS INFORMAÇÕES', colLeftX, infoTitleY);
 
   drawLabelBoldSuffix(colLeftX, infoTitleY + 4.6, 'Adicional por Tempo de Serviço: ', `${rt.atsPercentual}%`);
@@ -782,7 +833,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   // Coluna direita
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.8);
-  doc.setTextColor(55, 65, 81);
+  doc.setTextColor(...COLOR_PRIMARY);
   doc.text('INFORMAÇÕES PARA AS REGRAS TRANSITÓRIAS (LC 133/2021)', colRightX, infoTitleY);
 
   drawLabelBoldSuffix(colRightX, infoTitleY + 4.6, 'Idade em 31/12/2021: ', `${rt.idadeEm31Dez2021} anos`);
@@ -825,7 +876,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
       ? 18.0
       : Math.min(22.0, Math.min(effectiveRemaining, Math.max(12.0, effectiveRemaining * 0.68)));
 
-  doc.setDrawColor(229, 231, 235);
+  doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.28);
   doc.line(margin, currentY, margin + contentWidth, currentY);
 
@@ -835,7 +886,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   // Local e data por extenso à esquerda
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.0);
-  doc.setTextColor(75, 85, 99);
+  doc.setTextColor(...COLOR_SUBTEXT);
   const localDataLines = doc.splitTextToSize(
     `${data.lavratura.cidade || 'Curitiba'}, ${data.lavratura.data || ''}`,
     74
@@ -846,13 +897,13 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
   const signCenterX = pageWidth - margin - signBlockW / 2;
   const lineHalfW = 42;
 
-  doc.setDrawColor(148, 163, 184);
+  doc.setDrawColor(...COLOR_LABEL);
   doc.setLineWidth(0.35);
   doc.line(signCenterX - lineHalfW, signLineY, signCenterX + lineHalfW, signLineY);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.4);
-  doc.setTextColor(17, 24, 39);
+  doc.setTextColor(...COLOR_PRIMARY);
   doc.text(
     data.lavratura.servidorNome || 'Setor de Gestão de Processos e Benefícios Funcionais',
     signCenterX,
@@ -862,7 +913,7 @@ export function gerarCertidaoAposentadoriaPadraoPDF(data: CertidaoData): void {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.2);
-  doc.setTextColor(107, 114, 128);
+  doc.setTextColor(...COLOR_SUBTEXT);
   doc.text(subSignLines, signCenterX, signLineY + 8.3, { align: 'center' });
 
   // Rodapés dinâmicos (suporta 1 página única com folga)
@@ -936,8 +987,8 @@ export function gerarDossieEnvioIPMCPDF(data: CertidaoData): void {
   currentY += 25.0;
 
   // Faixa de Protocolo e Processo
-  doc.setFillColor(242, 246, 250);
-  doc.setDrawColor(0, 75, 141);
+  doc.setFillColor(241, 247, 253);
+  doc.setDrawColor(...COLOR_ACCENT);
   doc.setLineWidth(0.25);
   doc.roundedRect(margin, currentY, contentWidth, 12.5, 1.0, 1.0, 'FD');
 
@@ -1247,7 +1298,7 @@ export function gerarDossieEnvioIPMCPDF(data: CertidaoData): void {
   const quadroPrevidenciario = [
     [
       { content: 'Regra de Transição Aplicável / Sugerida:', styles: { fontStyle: 'bold', fillColor: [245, 247, 250] } },
-      { content: dIPMC?.regraSugerida || 'Art. 3º da EC 47/2005 (Direito Adquirido / Transição com Paridade e Integralidade)', styles: { fontStyle: 'bold', textColor: [0, 75, 141] } }
+      { content: dIPMC?.regraSugerida || 'Art. 3º da EC 47/2005 (Direito Adquirido / Transição com Paridade e Integralidade)', styles: { fontStyle: 'bold', textColor: COLOR_ACCENT } }
     ],
     [
       { content: 'Critério de Proventos e Reajuste:', styles: { fontStyle: 'bold' } },

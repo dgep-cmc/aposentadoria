@@ -46,7 +46,7 @@ import {
   getCertidoesEmitidas,
   excluirCertidaoEmitida
 } from '../utils/certidoesEmitidasStore';
-import { reemitirCertidaoRegistrada } from '../utils/certidaoBuilder';
+import { reemitirCertidaoRegistrada, enriquecerSnapshotCertidaoParaPDF } from '../utils/certidaoBuilder';
 import { gerarCertidaoAposentadoriaPadraoPDF } from '../utils/exportCertidaoPDF';
 import {
   StepPessoais,
@@ -1155,7 +1155,12 @@ export default function ServidoresHub({
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => gerarCertidaoAposentadoriaPadraoPDF(cert.snapshot)}
+                                    onClick={() => {
+                                      const matchedServidor = servidores.find(s => certMatchesServidor(cert, s));
+                                      gerarCertidaoAposentadoriaPadraoPDF(
+                                        enriquecerSnapshotCertidaoParaPDF(cert.snapshot, matchedServidor)
+                                      );
+                                    }}
                                     className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#004b8d] hover:bg-[#003a6d] text-white font-bold rounded-lg transition-all cursor-pointer"
                                     title="Baixar PDF desta certidão"
                                   >

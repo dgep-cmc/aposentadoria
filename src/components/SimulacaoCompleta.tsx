@@ -47,7 +47,8 @@ import {
   emitirCertidaoAbonoOficial,
   construirCertidaoAPartirDeSimulacao,
   extrairPeriodosDeCompetencias,
-  reemitirCertidaoRegistrada
+  reemitirCertidaoRegistrada,
+  enriquecerSnapshotCertidaoParaPDF
 } from '../utils/certidaoBuilder';
 import { 
   CertidaoEmitida, 
@@ -1389,13 +1390,47 @@ export function StepTempos({ sim, updateSim, hideAfastamentos = false }: { sim: 
                               />
                             </div>
                           </div>
+                        </div>
+                      )}
 
-                          <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 space-y-2">
+                      {/* Lista de Períodos Utilizados na Certidão (sempre acessível para ambos os métodos) */}
+                      {(() => {
+                        const periodosDetectadosFicha = extrairPeriodosDeCompetencias(lineStr);
+                        const rawLista = (row.periodoDescricao || '')
+                          .split(/[;\n]+/)
+                          .map(p => p.trim())
+                          .filter(Boolean);
+                        const pendingQuickRange = Boolean(quickRanges[idx]?.start && quickRanges[idx]?.end);
+
+                        return (
+                          <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 space-y-2.5">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                               <label className="text-[10px] font-bold text-[#004b8d] uppercase tracking-wider">
-                                Período(s) Referente(s) à Contagem de Tempo e Dias (para a Certidão)
+                                Período(s) Utilizado(s) / Referente(s) à Contagem (para a Certidão)
                               </label>
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              <div
+                                className="flex flex-wrap items-center gap-1.5"
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                    const s = quickRanges[idx]?.start || '';
+                                    const f = quickRanges[idx]?.end || '';
+                                    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+                                      const ys = Number(s.slice(0, 4));
+                                      const yf = Number(f.slice(0, 4));
+                                      if (ys >= 1940 && ys <= 2100 && yf >= 1940 && yf <= 2100) {
+                                        const toBr = (iso: string) => iso.split('-').reverse().join('/');
+                                        const novoTrecho = `${toBr(s)} a ${toBr(f)}`;
+                                        const atual = (row.periodoDescricao || '').trim();
+                                        const atualizado = atual
+                                          ? (atual.includes(novoTrecho) ? atual : `${atual}; ${novoTrecho}`)
+                                          : novoTrecho;
+                                        updateIncorporacao(idx, 'periodoDescricao', atualizado);
+                                        setQuickRanges(prev => ({ ...prev, [idx]: { start: '', end: '' } }));
+                                      }
+                                    }
+                                  }
+                                }}
+                              >
                                 <input
                                   type="date"
                                   value={quickRanges[idx]?.start || ''}
@@ -1406,7 +1441,7 @@ export function StepTempos({ sim, updateSim, hideAfastamentos = false }: { sim: 
                                     }))
                                   }
                                   className="p-1 bg-white border border-blue-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-[#004b8d]"
-                                  title="Data inicial do vínculo para adicionar à descrição"
+                                  title="Data inicial do vínculo para adicionar à lista"
                                 />
                                 <span className="text-[11px] text-gray-500">a</span>
                                 <input
@@ -1419,7 +1454,7 @@ export function StepTempos({ sim, updateSim, hideAfastamentos = false }: { sim: 
                                     }))
                                   }
                                   className="p-1 bg-white border border-blue-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-[#004b8d]"
-                                  title="Data final do vínculo para adicionar à descrição"
+                                  title="Data final do vínculo para adicionar à lista"
                                 />
                                 <button
                                   type="button"
@@ -1434,23 +1469,66 @@ export function StepTempos({ sim, updateSim, hideAfastamentos = false }: { sim: 
                                     updateIncorporacao(idx, 'periodoDescricao', atualizado);
                                     setQuickRanges(prev => ({ ...prev, [idx]: { start: '', end: '' } }));
                                   }}
-                                  disabled={!quickRanges[idx]?.start || !quickRanges[idx]?.end}
-                                  className="px-2.5 py-1 bg-[#004b8d] hover:bg-[#003a6d] disabled:opacity-40 text-white rounded text-[10px] font-bold cursor-pointer transition-colors"
+                                  disabled={!pendingQuickRange}
+                                  className={`px-2.5 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                                    pendingQuickRange
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs animate-pulse'
+                                      : 'bg-[#004b8d] hover:bg-[#003a6d] disabled:opacity-40 text-white'
+                                  }`}
                                 >
                                   + Incluir Período
                                 </button>
+                                {!row.periodoDescricao?.trim() && periodosDetectadosFicha && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateIncorporacao(idx, 'periodoDescricao', periodosDetectadosFicha)}
+                                    className="px-2.5 py-1 bg-white hover:bg-blue-100 text-[#004b8d] border border-blue-200 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                                    title="Preencher automaticamente a partir das competências coladas abaixo"
+                                  >
+                                    + Puxar da Ficha Mensal
+                                  </button>
+                                )}
                               </div>
                             </div>
+
+                            {rawLista.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {rawLista.map((pItem, pIdx) => (
+                                  <span
+                                    key={`${pItem}-${pIdx}`}
+                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white border border-blue-200 text-[#002f5a] rounded text-[11px] font-mono font-semibold"
+                                  >
+                                    {pItem}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextList = rawLista.filter((_, i) => i !== pIdx);
+                                        updateIncorporacao(idx, 'periodoDescricao', nextList.join('; '));
+                                      }}
+                                      className="text-gray-400 hover:text-red-600 cursor-pointer font-sans font-bold"
+                                      title="Remover este período"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
                             <input
                               type="text"
                               value={row.periodoDescricao || ''}
                               onChange={(e) => updateIncorporacao(idx, 'periodoDescricao', e.target.value)}
-                              placeholder="Ex: 01/03/1982 a 20/03/1983; 01/07/1983 a 17/07/1984; 11/04/1988 a 27/06/1988"
+                              placeholder={
+                                periodosDetectadosFicha
+                                  ? `Detectado da Ficha Mensal: ${periodosDetectadosFicha} (edite aqui se quiser listar em DD/MM/AAAA)`
+                                  : 'Ex: 01/03/1982 a 20/03/1983; 01/07/1983 a 17/07/1984; 11/04/1988 a 27/06/1988'
+                              }
                               className="w-full p-2 bg-white border border-blue-200 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#004b8d]"
                             />
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-gray-100">
                         {/* Tipo */}
@@ -1921,7 +1999,12 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
     setEditingHistCert(null);
     if (baixarPdf) {
       try {
-        gerarCertidaoAposentadoriaPadraoPDF(updatedSnapshot);
+        const mesmoServidor =
+          (sim.matricula && updatedItem.matricula && sim.matricula.trim() === updatedItem.matricula.trim()) ||
+          (sim.nome && updatedItem.servidorNome && sim.nome.trim().toLowerCase() === updatedItem.servidorNome.trim().toLowerCase());
+        gerarCertidaoAposentadoriaPadraoPDF(
+          mesmoServidor ? enriquecerSnapshotCertidaoParaPDF(updatedSnapshot, sim) : updatedSnapshot
+        );
       } catch (e) {
         showNotification('Alterações salvas, mas houve erro ao gerar PDF.');
         return;
@@ -4150,7 +4233,7 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                             type="button"
                             onClick={() => {
                               try {
-                                gerarCertidaoAposentadoriaPadraoPDF(doc.snapshot);
+                                gerarCertidaoAposentadoriaPadraoPDF(enriquecerSnapshotCertidaoParaPDF(doc.snapshot, sim));
                                 showNotification(`Certidão (${doc.numeroCertidao}) baixada novamente!`);
                               } catch (e) {
                                 showNotification('Erro ao gerar o PDF da certidão.');
@@ -4437,7 +4520,12 @@ export function StepGerar({ sim, initialShowReport = false }: { sim: UnifiedSimu
                         type="button"
                         onClick={() => {
                           try {
-                            gerarCertidaoAposentadoriaPadraoPDF(item.snapshot);
+                            const mesmoServidor =
+                              (sim.matricula && item.matricula && sim.matricula.trim() === item.matricula.trim()) ||
+                              (sim.nome && item.servidorNome && sim.nome.trim().toLowerCase() === item.servidorNome.trim().toLowerCase());
+                            gerarCertidaoAposentadoriaPadraoPDF(
+                              mesmoServidor ? enriquecerSnapshotCertidaoParaPDF(item.snapshot, sim) : item.snapshot
+                            );
                             showNotification(`Certidão (${item.numeroCertidao}) baixada novamente!`);
                           } catch (e) {
                             showNotification('Erro ao gerar o PDF da certidão.');

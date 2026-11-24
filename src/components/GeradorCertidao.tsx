@@ -37,7 +37,9 @@ import {
   diffCalendarDays, 
   calculateExactAge,
   extrairTemposIncorporacoes,
-  reemitirCertidaoRegistrada
+  reemitirCertidaoRegistrada,
+  isGenericInssDescText,
+  enriquecerSnapshotCertidaoParaPDF
 } from '../utils/certidaoBuilder';
 import { getPatternForCareer } from '../utils/settingsStore';
 import { getCareerDisplayName } from '../data/careers';
@@ -313,6 +315,7 @@ export default function GeradorCertidao({
   const [somenteServidorAtual, setSomenteServidorAtual] = useState<boolean>(Boolean(externalSim));
   const [deleteHistTarget, setDeleteHistTarget] = useState<CertidaoEmitida | null>(null);
   const [editingCertidao, setEditingCertidao] = useState<CertidaoEmitida | null>(null);
+  const [inssQuickRange, setInssQuickRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [reemissaoTarget, setReemissaoTarget] = useState<CertidaoEmitida | null>(null);
   const [reemissaoNovaDataHoje, setReemissaoNovaDataHoje] = useState<boolean>(false);
   const [confirmNovaOuReemissao, setConfirmNovaOuReemissao] = useState<{
@@ -334,6 +337,11 @@ export default function GeradorCertidao({
       setDraftSimulation(externalSim);
       handleImportarSimulacao(externalSim.id, externalSim, true);
       isInitializedRef.current = true;
+      getSavedSimulations()
+        .then(list => {
+          if (list) setSavedSimulations(list);
+        })
+        .catch(() => {});
       return;
     }
     // Carregar simulações salvas e vincular automaticamente à simulação ou restaurar rascunho da certidão
@@ -381,8 +389,25 @@ export default function GeradorCertidao({
 
         if (sameSim && !simUpdatedAfterCertidao) {
           let restoredData = savedCertidaoDraft.certidaoData;
-          // Preenche eventuais campos vazios com dados da simulação vinculada
-          if (!isStaticSelection && activeTargetSim) {
+          // Preenche eventuais campos vazios com dados da simulação vinculada correta
+          const poolMount = [...(draft ? [draft] : []), ...list];
+          const matchedSim =
+            (!isStaticSelection && savedCertidaoDraft.linkedSimId
+              ? poolMount.find(s => s.id === savedCertidaoDraft.linkedSimId)
+              : undefined) ||
+            (!isStaticSelection
+              ? poolMount.find(s => {
+                  const rMat = (restoredData.servidor?.matricula || '').trim().toLowerCase();
+                  const rNome = (restoredData.servidor?.nome || '').trim().toLowerCase();
+                  const sMat = (s.matricula || '').trim().toLowerCase();
+                  const sNome = (s.nome || '').trim().toLowerCase();
+                  if (rMat && sMat) return rMat === sMat;
+                  return Boolean(rNome && sNome && rNome === sNome);
+                })
+              : undefined) ||
+            activeTargetSim;
+
+          if (!isStaticSelection && matchedSim) {
             const toBr = (d?: string) => {
               if (!d) return '';
               const clean = d.split('T')[0];
@@ -390,32 +415,23 @@ export default function GeradorCertidao({
               return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : clean;
             };
             const s = restoredData.servidor;
-            const currentInssDesc = restoredData.gradeTempo?.tempoINSSPrivada?.periodoDesc || '';
-            const isGenericInssDesc =
-              !currentInssDesc ||
-              currentInssDesc.startsWith('Tempo e contribuição pós-07/1994 (') ||
-              currentInssDesc.startsWith('Apenas tempo pré-07/1994 (') ||
-              currentInssDesc.startsWith('CTC/INSS averbada (') ||
-              currentInssDesc === 'Certidão de Tempo de Contribuição CTC/INSS averbada';
-            const refreshedInssDesc = isGenericInssDesc
-              ? extrairTemposIncorporacoes(activeTargetSim.incorporacoes, !restoredData.isSimulacao ? false : true).inssDesc || currentInssDesc
-              : currentInssDesc;
+            const refreshedInssDesc = refreshGenericInssDesc(restoredData, matchedSim).gradeTempo.tempoINSSPrivada.periodoDesc || '';
 
             restoredData = {
               ...restoredData,
               servidor: {
                 ...s,
-                nome: s.nome || activeTargetSim.nome || '',
-                matricula: s.matricula || activeTargetSim.matricula || '',
-                rg: s.rg || activeTargetSim.rg || '',
-                cpf: s.cpf || activeTargetSim.cpf || '',
-                dataNascimento: s.dataNascimento || toBr(activeTargetSim.dataNascimento) || '',
-                cargo: s.cargo || getCareerDisplayName(activeTargetSim.cargo || activeTargetSim.selectedCareer) || '',
-                padrao: s.padrao || activeTargetSim.padrao || getPatternForCareer(activeTargetSim.selectedCareer || activeTargetSim.cargo) || '',
-                referencia: s.referencia || activeTargetSim.referencia || activeTargetSim.selectedLevel || 'I',
-                dataAdmissaoServicoPublico: s.dataAdmissaoServicoPublico || toBr(activeTargetSim.ingressoCmc || activeTargetSim.ingressoCargoAtual),
-                dataAdmissaoEstatutario: s.dataAdmissaoEstatutario || toBr(activeTargetSim.ingressoCargoAtual || activeTargetSim.ingressoCmc),
-                registroTribunalContas: s.registroTribunalContas || activeTargetSim.registroTribunalContas || ''
+                nome: s.nome || matchedSim.nome || '',
+                matricula: s.matricula || matchedSim.matricula || '',
+                rg: s.rg || matchedSim.rg || '',
+                cpf: s.cpf || matchedSim.cpf || '',
+                dataNascimento: s.dataNascimento || toBr(matchedSim.dataNascimento) || '',
+                cargo: s.cargo || getCareerDisplayName(matchedSim.cargo || matchedSim.selectedCareer) || '',
+                padrao: s.padrao || matchedSim.padrao || getPatternForCareer(matchedSim.selectedCareer || matchedSim.cargo) || '',
+                referencia: s.referencia || matchedSim.referencia || matchedSim.selectedLevel || 'I',
+                dataAdmissaoServicoPublico: s.dataAdmissaoServicoPublico || toBr(matchedSim.ingressoCmc || matchedSim.ingressoCargoAtual),
+                dataAdmissaoEstatutario: s.dataAdmissaoEstatutario || toBr(matchedSim.ingressoCargoAtual || matchedSim.ingressoCmc),
+                registroTribunalContas: s.registroTribunalContas || matchedSim.registroTribunalContas || ''
               },
               gradeTempo: {
                 ...restoredData.gradeTempo,
@@ -466,7 +482,8 @@ export default function GeradorCertidao({
       setHistoricoCertidoes(all);
       setEditingCertidao(target);
       hasManualEditsRef.current = true;
-      setCertidaoData(JSON.parse(JSON.stringify(target.snapshot)));
+      const simRel = findSimForCert(target);
+      setCertidaoData(refreshGenericInssDesc(JSON.parse(JSON.stringify(target.snapshot)), simRel));
       setActiveTab('preview');
       triggerFeedback(`Modo de edição ativo para a certidão ${target.numeroCertidao}. Alterações não alteram a contagem sequencial.`);
     }
@@ -634,10 +651,130 @@ export default function GeradorCertidao({
     triggerFeedback(`Próximo número sugerido (${labelTipo}): ${proximo} (será reservado na emissão oficial).`);
   };
 
+  const findSimForCert = (cert?: { matricula?: string; servidorNome?: string; servidor?: { matricula?: string; nome?: string } }): UnifiedSimulation | undefined => {
+    const mat = (cert?.matricula || cert?.servidor?.matricula || '').trim().toLowerCase();
+    const nome = (cert?.servidorNome || cert?.servidor?.nome || '').trim().toLowerCase();
+    if (externalSim) {
+      if (!cert || (!mat && !nome)) return externalSim;
+      const eMat = (externalSim.matricula || '').trim().toLowerCase();
+      const eNome = (externalSim.nome || '').trim().toLowerCase();
+      if ((mat && eMat && mat === eMat) || (nome && eNome && nome === eNome)) {
+        return externalSim;
+      }
+    }
+    const currentDraft = draftSimulation || getDraftSimulation();
+    const pool = [...(externalSim ? [externalSim] : []), ...savedSimulations, ...(currentDraft ? [currentDraft] : [])];
+    return pool.find(s => {
+      const sMat = (s.matricula || '').trim().toLowerCase();
+      const sNome = (s.nome || '').trim().toLowerCase();
+      if (mat && sMat) return mat === sMat;
+      return Boolean(nome && sNome && nome === sNome);
+    });
+  };
+
+  const syncInssPeriodoToSim = (nextDesc: string) => {
+    const clean = (nextDesc || '').trim();
+    if (!clean || isGenericInssDescText(clean)) return;
+    const baseSim = getSimulacaoVinculadaAtual() || findSimForCert(certidaoData);
+    if (!baseSim) return;
+
+    const incs = Array.isArray(baseSim.incorporacoes) ? baseSim.incorporacoes : [];
+    const isInssInc = (inc: UnifiedSimulation['incorporacoes'][number]) => {
+      const t = (inc.tipo || '').toLowerCase();
+      const n = (inc.nome || '').toLowerCase();
+      return (
+        t === 'contribution-only' ||
+        t === 'pre-1994' ||
+        t.includes('inss') ||
+        t.includes('rgps') ||
+        (t !== 'all-effects' && (n.includes('inss') || n.includes('rgps')))
+      );
+    };
+
+    const inssIndices = incs
+      .map((inc, idx) => (isInssInc(inc) ? idx : -1))
+      .filter(idx => idx >= 0);
+
+    if (inssIndices.length === 0) return;
+
+    const targetIdx = inssIndices[0];
+    const currentTarget = incs[targetIdx];
+    if ((currentTarget.periodoDescricao || '').trim() === clean) return;
+
+    const updatedIncs = incs.map((inc, idx) =>
+      idx === targetIdx ? { ...inc, periodoDescricao: clean } : inc
+    );
+    const nowIso = new Date().toISOString();
+    const updatedSim: UnifiedSimulation = {
+      ...baseSim,
+      incorporacoes: updatedIncs,
+      updatedAt: nowIso
+    };
+
+    linkedSimMetaRef.current = { id: updatedSim.id, updatedAt: nowIso };
+    setDraftSimulation(updatedSim);
+    if (onSyncSim) {
+      onSyncSim(updatedSim);
+    }
+    if (externalSim || selectedSimId === 'draft' || draftSimulation?.id === updatedSim.id) {
+      saveDraftSimulation(updatedSim);
+    }
+    const existsInSaved = savedSimulations.some(item => item.id === updatedSim.id);
+    if (existsInSaved) {
+      setSavedSimulations(prev => prev.map(item => (item.id === updatedSim.id ? updatedSim : item)));
+      saveSimulation(updatedSim).catch(() => {});
+    }
+  };
+
+  const aplicarNovoPeriodoInss = (novoTrecho: string) => {
+    const cleanNovo = novoTrecho.trim();
+    if (!cleanNovo) return;
+    const atual = (certidaoData.gradeTempo?.tempoINSSPrivada?.periodoDesc || '').trim();
+    const baseLimpa = isGenericInssDescText(atual) ? '' : atual;
+    const nextDesc = baseLimpa
+      ? (baseLimpa.includes(cleanNovo) ? baseLimpa : `${baseLimpa}; ${cleanNovo}`)
+      : cleanNovo;
+    updateGradeItem('tempoINSSPrivada', 'periodoDesc', nextDesc);
+    syncInssPeriodoToSim(nextDesc);
+  };
+
+  const refreshGenericInssDesc = (cert: CertidaoData, simRel?: UnifiedSimulation | null): CertidaoData => {
+    return enriquecerSnapshotCertidaoParaPDF(cert, simRel);
+  };
+
+  const getCertidaoComInssPendente = (base: CertidaoData = certidaoData): CertidaoData => {
+    let next = base;
+    if (inssQuickRange.start && inssQuickRange.end) {
+      const toBr = (iso: string) => iso.split('-').reverse().join('/');
+      const novo = `${toBr(inssQuickRange.start)} a ${toBr(inssQuickRange.end)}`;
+      const atual = (next.gradeTempo?.tempoINSSPrivada?.periodoDesc || '').trim();
+      const baseLimpa = isGenericInssDescText(atual) ? '' : atual;
+      const merged = baseLimpa
+        ? (baseLimpa.includes(novo) ? baseLimpa : `${baseLimpa}; ${novo}`)
+        : novo;
+      next = {
+        ...next,
+        gradeTempo: {
+          ...next.gradeTempo,
+          tempoINSSPrivada: {
+            ...next.gradeTempo.tempoINSSPrivada,
+            periodoDesc: merged
+          }
+        }
+      };
+      setInssQuickRange({ start: '', end: '' });
+      setCertidaoData(next);
+      syncInssPeriodoToSim(merged);
+    }
+    const simVinculada = getSimulacaoVinculadaAtual() || findSimForCert(next);
+    return enriquecerSnapshotCertidaoParaPDF(next, simVinculada);
+  };
+
   const handleIniciarEdicaoCertidao = (item: CertidaoEmitida) => {
     setEditingCertidao(item);
     hasManualEditsRef.current = true;
-    setCertidaoData(JSON.parse(JSON.stringify(item.snapshot)));
+    const simRel = findSimForCert(item);
+    setCertidaoData(refreshGenericInssDesc(JSON.parse(JSON.stringify(item.snapshot)), simRel));
     setActiveTab('preview');
     triggerFeedback(`Editando certidão ${item.numeroCertidao}. Alterações serão salvas sem alterar a contagem sequencial.`);
   };
@@ -645,9 +782,10 @@ export default function GeradorCertidao({
   const handleSalvarEdicaoCertidao = (baixarPdf = false) => {
     if (!editingCertidao) return;
     try {
-      const numeroFinal = (certidaoData.numeroCertidao || '').trim() || editingCertidao.numeroCertidao;
+      const baseComInss = getCertidaoComInssPendente();
+      const numeroFinal = (baseComInss.numeroCertidao || '').trim() || editingCertidao.numeroCertidao;
       const updatedSnapshot: CertidaoData = {
-        ...certidaoData,
+        ...baseComInss,
         numeroCertidao: numeroFinal
       };
       const grade = updatedSnapshot.gradeTempo.tempoTotalServicoContribuicao;
@@ -816,8 +954,9 @@ export default function GeradorCertidao({
 
   const executarReemissaoEmTela = (existente: CertidaoEmitida, tipo: TipoCertidaoSequencial) => {
     try {
+      const baseComInss = getCertidaoComInssPendente();
       const snapshotAtualizado: CertidaoData = {
-        ...certidaoData,
+        ...baseComInss,
         numeroCertidao: existente.numeroCertidao,
         tipoCertidao: tipo,
         isSimulacao: false
@@ -849,9 +988,10 @@ export default function GeradorCertidao({
       }
     }
 
+    const baseComInss = getCertidaoComInssPendente();
     const numeroOficial = resolverNumeroOficialParaEmissao(tipo);
     const oficialData: CertidaoData = {
-      ...certidaoData,
+      ...baseComInss,
       numeroCertidao: numeroOficial,
       tipoCertidao: tipo,
       isSimulacao: false
@@ -911,8 +1051,9 @@ export default function GeradorCertidao({
 
   const handleEmitirSimulacao = () => {
     try {
+      const baseComInss = getCertidaoComInssPendente();
       const simData: CertidaoData = {
-        ...certidaoData,
+        ...baseComInss,
         tipoCertidao: 'aposentadoria',
         numeroCertidao: 'SIMULAÇÃO',
         isSimulacao: true
@@ -971,8 +1112,9 @@ export default function GeradorCertidao({
 
   const handleEmitirAbonoSimulacao = () => {
     try {
+      const baseComInss = getCertidaoComInssPendente();
       const abonoSimData: CertidaoData = {
-        ...certidaoData,
+        ...baseComInss,
         tipoCertidao: 'abono_permanencia',
         numeroCertidao: 'SIMULAÇÃO',
         isSimulacao: true
@@ -1700,7 +1842,10 @@ export default function GeradorCertidao({
       {/* Navegação de Abas do Gerador */}
       <div className="flex flex-wrap items-center gap-1 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('preview')}
+          onClick={() => {
+            getCertidaoComInssPendente();
+            setActiveTab('preview');
+          }}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-t-lg transition-all border-b-2 cursor-pointer ${
             activeTab === 'preview'
               ? 'border-[#004b8d] text-[#004b8d] bg-white shadow-xs'
@@ -1799,20 +1944,20 @@ export default function GeradorCertidao({
           </div>
 
           {/* Documento Estilizado (Paper Sheet) */}
-          <div className="bg-white border-2 border-gray-300 rounded-xl shadow-lg p-6 sm:p-10 font-sans max-w-4xl mx-auto space-y-6 print:border-none print:shadow-none">
+          <div className="bg-white border border-slate-300 rounded-xl shadow-lg p-6 sm:p-10 font-sans max-w-4xl mx-auto space-y-6 print:border-none print:shadow-none">
             {/* Header Documento com Logomarca Oficial */}
-            <div className="flex flex-col sm:flex-row items-center justify-between border-b-2 border-[#002f5a] pb-4 gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between border-b-2 border-[#2166a6] pb-4 gap-4">
               <div className="flex items-center gap-4">
                 <img 
                   src="/assets/aistudio/horizontal_preto_pequeno_b6636aa0.png" 
                   alt="Logomarca da Câmara Municipal de Curitiba" 
                   className="h-12 w-auto object-contain shrink-0" 
                 />
-                <div className="border-l-2 border-gray-200 pl-4 text-left">
-                  <h2 className="text-sm sm:text-base font-black text-[#002f5a] tracking-tight uppercase leading-snug">
+                <div className="border-l-2 border-slate-200 pl-4 text-left">
+                  <h2 className="text-sm sm:text-base font-black text-[#2166a6] tracking-tight uppercase leading-snug">
                     Diretoria de Gestão de Pessoas — DGEP
                   </h2>
-                  <p className="text-xs text-gray-600 font-medium">
+                  <p className="text-xs text-slate-600 font-medium">
                     Setor de Gestão de Processos e Benefícios Funcionais
                   </p>
                 </div>
@@ -1822,10 +1967,10 @@ export default function GeradorCertidao({
             {/* Faixa Título */}
             <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 py-2.5 rounded-lg gap-2 border ${
               certidaoData.isSimulacao
-                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                ? 'bg-[#fef9ee] border-[#e6c686] text-[#824a12]'
                 : certidaoData.tipoCertidao === 'abono_permanencia'
-                  ? 'bg-purple-50/80 border-purple-300 text-purple-950'
-                  : 'bg-[#f0f4f8] border-[#004b8d]/30 text-[#002f5a]'
+                  ? 'bg-[#eef8f8] border-[#aed6d6] text-[#155e63]'
+                  : 'bg-[#f0f6fd] border-[#bed6ee] text-[#2166a6]'
             }`}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-extrabold uppercase">
@@ -1838,22 +1983,28 @@ export default function GeradorCertidao({
                       : `CERTIDÃO DE APOSENTADORIA Nº ${certidaoData.numeroCertidao}`}
                 </span>
                 {certidaoData.isSimulacao && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-[#e6c686]">
                     SEM VALIDADE OFICIAL
                   </span>
                 )}
               </div>
-              <span className="text-xs font-semibold text-gray-600">
-                Data da certidão: <strong>{certidaoData.dataCertidao}</strong>
+              <span className={`text-xs font-semibold ${
+                certidaoData.isSimulacao
+                  ? 'text-[#785222]'
+                  : certidaoData.tipoCertidao === 'abono_permanencia'
+                    ? 'text-[#326a6f]'
+                    : 'text-slate-600'
+              }`}>
+                Data da certidão: <strong className="font-bold">{certidaoData.dataCertidao}</strong>
               </span>
             </div>
 
             {/* Bloco 1: Dados do Servidor */}
             <div className="space-y-2">
-              <h3 className="text-xs font-extrabold text-[#002f5a] uppercase border-l-3 border-[#002f5a] pl-2">
+              <h3 className="text-xs font-extrabold text-[#2166a6] uppercase border-l-3 border-[#2166a6] pl-2">
                 1. Dados do Servidor
               </h3>
-              <div className="border border-gray-200 rounded-xl p-4 sm:p-5 bg-white shadow-xs space-y-3.5">
+              <div className="border border-slate-200 rounded-xl p-4 sm:p-5 bg-white shadow-xs space-y-3.5">
                 {/* Linha 1: NOME (50%) | RG (25%) | CPF (25%) */}
                 <div className="grid grid-cols-12 gap-4 items-start">
                   <div className="col-span-12 sm:col-span-6">
@@ -1967,10 +2118,10 @@ export default function GeradorCertidao({
               <h3 className="text-xs font-extrabold text-[#002f5a] uppercase border-l-3 border-[#002f5a] pl-2 tracking-wide">
                 2. Grade de Tempo de Serviço / Contribuição
               </h3>
-              <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-2xs">
+              <div className="overflow-x-auto border border-slate-200 rounded-lg shadow-2xs">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-[#002f5a] text-white text-[11px]">
+                    <tr className="bg-[#2166a6] text-white text-[11px]">
                       <th className="p-2.5 font-bold">Tempos de serviço/ contribuição:</th>
                       <th className="p-2.5 font-bold text-center w-16">ANOS</th>
                       <th className="p-2.5 font-bold text-center w-16">MESES</th>
@@ -1978,115 +2129,180 @@ export default function GeradorCertidao({
                       <th className="p-2.5 font-bold text-right w-24">EM DIAS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-slate-200">
                     {/* 1. Tempo Estatutário na CMC */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">
+                    <tr className="bg-white hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">
                         Tempo Estatutário na CMC {certidaoData.gradeTempo.tempoEstatutarioCMC.periodoDesc ? `(${certidaoData.gradeTempo.tempoEstatutarioCMC.periodoDesc.replace(/^\(|\)$/g, '')}):` : ':'}
                       </td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoEstatutarioCMC.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoEstatutarioCMC.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoEstatutarioCMC.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.tempoEstatutarioCMC.totalDias.toLocaleString('pt-BR')}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoEstatutarioCMC.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoEstatutarioCMC.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoEstatutarioCMC.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.tempoEstatutarioCMC.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 2. Tempo Fícto */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Tempo Fícto (licenças-prêmio incorporadas – CMC):</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoFictoLicencaPremio.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoFictoLicencaPremio.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoFictoLicencaPremio.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.tempoFictoLicencaPremio.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Tempo Fícto (licenças-prêmio incorporadas – CMC):</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoFictoLicencaPremio.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoFictoLicencaPremio.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoFictoLicencaPremio.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.tempoFictoLicencaPremio.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 3. Tempo Recibado */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Tempo de Serviço Público Municipal (Recibado) incorporado:</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-white hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Tempo de Serviço Público Municipal (Recibado) incorporado:</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.tempoServicoPublicoRecibado.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 4. Tempo Municipal CLT */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">
+                    <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">
                         Tempo de Serviço Público Municipal (CLT) incorporado {certidaoData.gradeTempo.tempoServicoPublicoCLT.periodoDesc ? `(${certidaoData.gradeTempo.tempoServicoPublicoCLT.periodoDesc.replace(/^\(|\)$/g, '')}):` : ':'}
                       </td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoCLT.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoCLT.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoServicoPublicoCLT.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.tempoServicoPublicoCLT.totalDias.toLocaleString('pt-BR')}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoCLT.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoCLT.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoServicoPublicoCLT.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.tempoServicoPublicoCLT.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 5. Outras incorporações Estatutário */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Outras incorporações de Tempo de Serviço Público (Estatutário):</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-white hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Outras incorporações de Tempo de Serviço Público (Estatutário):</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.outrasIncorporacoesEstatutario.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 6. Outras incorporações CLT */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Outras incorporações de Tempo de Serviço Público (CLT):</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesCLT.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesCLT.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.outrasIncorporacoesCLT.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.outrasIncorporacoesCLT.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Outras incorporações de Tempo de Serviço Público (CLT):</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesCLT.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesCLT.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.outrasIncorporacoesCLT.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.outrasIncorporacoesCLT.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 7. Afastamentos sem vencimento */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Afastamentos sem vencimento:</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.afastamentosSemVencimento.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.afastamentosSemVencimento.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.afastamentosSemVencimento.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.afastamentosSemVencimento.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-white hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Afastamentos sem vencimento:</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.afastamentosSemVencimento.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.afastamentosSemVencimento.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.afastamentosSemVencimento.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.afastamentosSemVencimento.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 8. Penalidades Administrativas, suspensão e faltas */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">Penalidades Administrativas, suspensão e faltas:</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.penalidadesAdministrativas.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.penalidadesAdministrativas.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.penalidadesAdministrativas.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.penalidadesAdministrativas.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">Penalidades Administrativas, suspensão e faltas:</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.penalidadesAdministrativas.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.penalidadesAdministrativas.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.penalidadesAdministrativas.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.penalidadesAdministrativas.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 9. Subtotal: Tempo Total de Serviço Público */}
-                    <tr className="bg-[#f0f7ff] font-bold border-y border-blue-200">
-                      <td className="p-2.5 text-[#002f5a] font-extrabold uppercase tracking-wide">Tempo Total de Serviço Público:</td>
-                      <td className="p-2.5 text-center text-[#002f5a] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.anos}</td>
-                      <td className="p-2.5 text-center text-[#002f5a] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.meses}</td>
-                      <td className="p-2.5 text-center text-[#002f5a] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.dias}</td>
-                      <td className="p-2.5 text-right text-[#005599] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-[#f1f7fd] font-bold border-y border-[#c4daf0]">
+                      <td className="p-2.5 text-[#2166a6] font-extrabold uppercase tracking-wide">Tempo Total de Serviço Público:</td>
+                      <td className="p-2.5 text-center text-[#2166a6] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.anos}</td>
+                      <td className="p-2.5 text-center text-[#2166a6] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.meses}</td>
+                      <td className="p-2.5 text-center text-[#2166a6] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.dias}</td>
+                      <td className="p-2.5 text-right text-[#2b72b3] font-extrabold">{certidaoData.gradeTempo.tempoTotalServicoPublico.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 10. Tempo de Contribuição INSS */}
-                    <tr className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-800">
+                    <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors">
+                      <td className="p-2.5 text-slate-800">
                         <div>Tempo de Contribuição na iniciativa privada incorporado (INSS)</div>
                         {certidaoData.gradeTempo.tempoINSSPrivada.periodoDesc && (
-                          <div className="text-[11px] text-gray-500 font-normal mt-0.5 leading-snug">
+                          <div className="text-[11px] text-slate-600 font-normal mt-0.5 leading-snug">
                             {certidaoData.gradeTempo.tempoINSSPrivada.periodoDesc}
                           </div>
                         )}
+                        {certidaoData.gradeTempo.tempoINSSPrivada.totalDias > 0 &&
+                          isGenericInssDescText(certidaoData.gradeTempo.tempoINSSPrivada.periodoDesc) && (
+                            <div className="print:hidden mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[10.5px] font-bold text-amber-950">
+                                  ⚠ Nenhuma data de período detectada para o INSS — informe as datas abaixo para sair no PDF:
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('grade')}
+                                  className="text-[10px] font-bold text-[#2166a6] hover:underline cursor-pointer"
+                                >
+                                  Abrir Grade completa →
+                                </button>
+                              </div>
+                              <div
+                                className="flex flex-wrap items-center gap-1.5"
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                    const s = inssQuickRange.start;
+                                    const f = inssQuickRange.end;
+                                    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+                                      const ys = Number(s.slice(0, 4));
+                                      const yf = Number(f.slice(0, 4));
+                                      if (ys >= 1940 && ys <= 2100 && yf >= 1940 && yf <= 2100) {
+                                        const toBr = (iso: string) => iso.split('-').reverse().join('/');
+                                        aplicarNovoPeriodoInss(`${toBr(s)} a ${toBr(f)}`);
+                                        setInssQuickRange({ start: '', end: '' });
+                                      }
+                                    }
+                                  }
+                                }}
+                              >
+                                <input
+                                  type="date"
+                                  value={inssQuickRange.start}
+                                  onChange={(e) => setInssQuickRange(prev => ({ ...prev, start: e.target.value }))}
+                                  className="p-1 bg-white border border-amber-300 rounded text-[11px]"
+                                  title="Data inicial do período INSS"
+                                />
+                                <span className="text-[11px] text-amber-900 font-semibold">a</span>
+                                <input
+                                  type="date"
+                                  value={inssQuickRange.end}
+                                  onChange={(e) => setInssQuickRange(prev => ({ ...prev, end: e.target.value }))}
+                                  className="p-1 bg-white border border-amber-300 rounded text-[11px]"
+                                  title="Data final do período INSS"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!inssQuickRange.start || !inssQuickRange.end}
+                                  onClick={() => {
+                                    if (!inssQuickRange.start || !inssQuickRange.end) return;
+                                    const toBr = (iso: string) => iso.split('-').reverse().join('/');
+                                    aplicarNovoPeriodoInss(`${toBr(inssQuickRange.start)} a ${toBr(inssQuickRange.end)}`);
+                                    setInssQuickRange({ start: '', end: '' });
+                                    triggerFeedback('Período INSS incluído na certidão e pronto para o PDF!');
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[10px] font-bold cursor-pointer"
+                                >
+                                  + Incluir Período
+                                </button>
+                              </div>
+                            </div>
+                          )}
                       </td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoINSSPrivada.anos}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoINSSPrivada.meses}</td>
-                      <td className="p-2.5 text-center text-gray-700">{certidaoData.gradeTempo.tempoINSSPrivada.dias}</td>
-                      <td className="p-2.5 text-right font-bold text-gray-900">{certidaoData.gradeTempo.tempoINSSPrivada.totalDias.toLocaleString('pt-BR')}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoINSSPrivada.anos}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoINSSPrivada.meses}</td>
+                      <td className="p-2.5 text-center text-slate-600">{certidaoData.gradeTempo.tempoINSSPrivada.dias}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900">{certidaoData.gradeTempo.tempoINSSPrivada.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
 
                     {/* 11. Total Geral: Tempo Total de Serviço/Contribuição */}
-                    <tr className="bg-[#e2eef9] font-black border-t-2 border-[#002f5a]">
-                      <td className="p-3 text-[#002f5a] uppercase text-xs font-black tracking-wide">Tempo Total de Serviço/Contribuição:</td>
-                      <td className="p-3 text-center text-xs text-[#002f5a] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.anos}</td>
-                      <td className="p-3 text-center text-xs text-[#002f5a] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.meses}</td>
-                      <td className="p-3 text-center text-xs text-[#002f5a] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.dias}</td>
-                      <td className="p-3 text-right text-xs text-[#002f5a] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-[#e1eefb] font-black border-t-2 border-[#2166a6]">
+                      <td className="p-3 text-[#2166a6] uppercase text-xs font-black tracking-wide">Tempo Total de Serviço/Contribuição:</td>
+                      <td className="p-3 text-center text-xs text-[#2166a6] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.anos}</td>
+                      <td className="p-3 text-center text-xs text-[#2166a6] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.meses}</td>
+                      <td className="p-3 text-center text-xs text-[#2166a6] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.dias}</td>
+                      <td className="p-3 text-right text-xs text-[#2166a6] font-black">{certidaoData.gradeTempo.tempoTotalServicoContribuicao.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2095,13 +2311,13 @@ export default function GeradorCertidao({
 
             {/* Bloco 3: Tempos de Exercício */}
             <div className="space-y-2">
-              <h3 className="text-xs font-extrabold text-[#002f5a] uppercase border-l-3 border-[#002f5a] pl-2">
+              <h3 className="text-xs font-extrabold text-[#2166a6] uppercase border-l-3 border-[#2166a6] pl-2">
                 3. Tempos de Exercício
               </h3>
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-gray-100 text-gray-700 text-[11px]">
+                    <tr className="bg-[#eef4fb] text-[#2166a6] border-b border-slate-300 text-[11px]">
                       <th className="p-2 font-bold">Tempos de exercício</th>
                       <th className="p-2 font-bold text-center w-14">ANOS</th>
                       <th className="p-2 font-bold text-center w-14">MESES</th>
@@ -2109,20 +2325,20 @@ export default function GeradorCertidao({
                       <th className="p-2 font-bold text-right w-24">EM DIAS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    <tr>
-                      <td className="p-2 text-gray-800">Tempo de serviço público ({certidaoData.temposExercicio.servicoPublicoTotal.periodoDesc})</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.servicoPublicoTotal.anos}</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.servicoPublicoTotal.meses}</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.servicoPublicoTotal.dias}</td>
-                      <td className="p-2 text-right font-bold text-gray-800">{certidaoData.temposExercicio.servicoPublicoTotal.totalDias.toLocaleString('pt-BR')}</td>
+                  <tbody className="divide-y divide-slate-200">
+                    <tr className="bg-white">
+                      <td className="p-2 text-slate-800">Tempo de serviço público ({certidaoData.temposExercicio.servicoPublicoTotal.periodoDesc})</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.servicoPublicoTotal.anos}</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.servicoPublicoTotal.meses}</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.servicoPublicoTotal.dias}</td>
+                      <td className="p-2 text-right font-bold text-slate-900">{certidaoData.temposExercicio.servicoPublicoTotal.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
-                    <tr>
-                      <td className="p-2 text-gray-800">Tempo no cargo efetivo ({certidaoData.temposExercicio.cargoEfetivoTotal.periodoDesc})</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.cargoEfetivoTotal.anos}</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.cargoEfetivoTotal.meses}</td>
-                      <td className="p-2 text-center">{certidaoData.temposExercicio.cargoEfetivoTotal.dias}</td>
-                      <td className="p-2 text-right font-bold text-gray-800">{certidaoData.temposExercicio.cargoEfetivoTotal.totalDias.toLocaleString('pt-BR')}</td>
+                    <tr className="bg-slate-50/80">
+                      <td className="p-2 text-slate-800">Tempo no cargo efetivo ({certidaoData.temposExercicio.cargoEfetivoTotal.periodoDesc})</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.cargoEfetivoTotal.anos}</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.cargoEfetivoTotal.meses}</td>
+                      <td className="p-2 text-center text-slate-600">{certidaoData.temposExercicio.cargoEfetivoTotal.dias}</td>
+                      <td className="p-2 text-right font-bold text-slate-900">{certidaoData.temposExercicio.cargoEfetivoTotal.totalDias.toLocaleString('pt-BR')}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2130,37 +2346,37 @@ export default function GeradorCertidao({
             </div>
 
             {/* Bloco 4: Regras Transitórias e Informações Adicionais */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-              <div>
-                <span className="font-bold text-gray-700 block mb-1 text-[11px] uppercase">Outras Informações</span>
-                <p className="text-gray-800">
-                  Adicional por Tempo de Serviço: <strong>{certidaoData.regrasTransitorias.atsPercentual}%</strong>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs border border-slate-200 rounded-lg p-3.5 bg-slate-50/90 md:divide-x md:divide-slate-200">
+              <div className="md:pr-4">
+                <span className="font-bold text-[#2166a6] block mb-1.5 text-[11px] uppercase tracking-wide">Outras Informações</span>
+                <p className="text-slate-600">
+                  Adicional por Tempo de Serviço: <strong className="text-slate-900">{certidaoData.regrasTransitorias.atsPercentual}%</strong>
                 </p>
-                <p className="text-gray-800 mt-1">
-                  Recebe Abono de Permanência? <strong>{certidaoData.regrasTransitorias.recebeAbono ? `Sim (Data: ${certidaoData.regrasTransitorias.dataAbono})` : 'Não'}</strong>
+                <p className="text-slate-600 mt-1">
+                  Recebe Abono de Permanência? <strong className="text-slate-900">{certidaoData.regrasTransitorias.recebeAbono ? `Sim (Data: ${certidaoData.regrasTransitorias.dataAbono})` : 'Não'}</strong>
                 </p>
               </div>
 
-              <div>
-                <span className="font-bold text-gray-700 block mb-1 text-[11px] uppercase">Informações para as Regras Transitórias (LC 133/2021)</span>
-                <p className="text-gray-800">
-                  Idade em 31/12/2021: <strong>{certidaoData.regrasTransitorias.idadeEm31Dez2021} anos</strong>
+              <div className="md:pl-4">
+                <span className="font-bold text-[#2166a6] block mb-1.5 text-[11px] uppercase tracking-wide">Informações para as Regras Transitórias (LC 133/2021)</span>
+                <p className="text-slate-600">
+                  Idade em 31/12/2021: <strong className="text-slate-900">{certidaoData.regrasTransitorias.idadeEm31Dez2021} anos</strong>
                 </p>
-                <p className="text-gray-800 mt-1">
-                  Tempo Serviço/Contribuição em 31/12/2021: <strong>{certidaoData.regrasTransitorias.tempoEm31Dez2021Anos} anos</strong> ({certidaoData.marcos.diasAte31Dez2021.toLocaleString('pt-BR')} dias)
+                <p className="text-slate-600 mt-1">
+                  Tempo Serviço/Contribuição em 31/12/2021: <strong className="text-slate-900">{certidaoData.regrasTransitorias.tempoEm31Dez2021Anos} anos</strong> ({certidaoData.marcos.diasAte31Dez2021.toLocaleString('pt-BR')} dias)
                 </p>
               </div>
             </div>
 
             {/* Bloco 5: Lavratura */}
-            <div className="pt-8 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-end gap-6 text-xs">
-              <div className="text-gray-600 self-start sm:self-center">
+            <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-end gap-6 text-xs">
+              <div className="text-slate-600 self-start sm:self-center">
                 {certidaoData.lavratura.cidade}, {certidaoData.lavratura.data}
               </div>
               <div className="text-center space-y-1 pt-6">
-                <div className="w-72 border-t border-gray-400 mx-auto pt-1.5" />
-                <p className="font-bold text-gray-900">{certidaoData.lavratura.servidorNome}</p>
-                <p className="text-[11px] text-gray-500">Matrícula {certidaoData.lavratura.servidorMatricula} • {certidaoData.lavratura.setor}</p>
+                <div className="w-72 border-t border-slate-500 mx-auto pt-1.5" />
+                <p className="font-bold text-[#2166a6]">{certidaoData.lavratura.servidorNome}</p>
+                <p className="text-[11px] text-slate-600">Matrícula {certidaoData.lavratura.servidorMatricula} • {certidaoData.lavratura.setor}</p>
               </div>
             </div>
           </div>
@@ -2894,14 +3110,141 @@ export default function GeradorCertidao({
                     className="w-full p-2 border border-gray-300 rounded-md font-bold text-[#004b8d]"
                   />
                 </div>
-                <div className="col-span-2 sm:col-span-4">
-                  <label className="block text-[10px] text-gray-500 font-bold uppercase">Discriminação dos Períodos INSS</label>
+                <div className="col-span-2 sm:col-span-4 space-y-2 pt-1 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="block text-[10px] text-gray-600 font-bold uppercase">
+                      Períodos Utilizados / Discriminação INSS
+                    </label>
+                    <div
+                      className="flex flex-wrap items-center gap-1.5"
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          const s = inssQuickRange.start;
+                          const f = inssQuickRange.end;
+                          if (/^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+                            const ys = Number(s.slice(0, 4));
+                            const yf = Number(f.slice(0, 4));
+                            if (ys >= 1940 && ys <= 2100 && yf >= 1940 && yf <= 2100) {
+                              const toBr = (iso: string) => iso.split('-').reverse().join('/');
+                              aplicarNovoPeriodoInss(`${toBr(s)} a ${toBr(f)}`);
+                              setInssQuickRange({ start: '', end: '' });
+                            }
+                          }
+                        }
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={inssQuickRange.start}
+                        onChange={(e) => setInssQuickRange(prev => ({ ...prev, start: e.target.value }))}
+                        className="p-1 bg-white border border-gray-300 rounded text-[11px]"
+                        title="Data inicial do período"
+                      />
+                      <span className="text-[11px] text-gray-500">a</span>
+                      <input
+                        type="date"
+                        value={inssQuickRange.end}
+                        onChange={(e) => setInssQuickRange(prev => ({ ...prev, end: e.target.value }))}
+                        className="p-1 bg-white border border-gray-300 rounded text-[11px]"
+                        title="Data final do período"
+                      />
+                      <button
+                        type="button"
+                        disabled={!inssQuickRange.start || !inssQuickRange.end}
+                        onClick={() => {
+                          if (!inssQuickRange.start || !inssQuickRange.end) return;
+                          const toBr = (iso: string) => iso.split('-').reverse().join('/');
+                          aplicarNovoPeriodoInss(`${toBr(inssQuickRange.start)} a ${toBr(inssQuickRange.end)}`);
+                          setInssQuickRange({ start: '', end: '' });
+                        }}
+                        className={`px-2.5 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                          inssQuickRange.start && inssQuickRange.end
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-[#004b8d] hover:bg-[#003a6d] disabled:opacity-40 text-white'
+                        }`}
+                      >
+                        + Incluir Período
+                      </button>
+                      {(() => {
+                        const simVinculada = getSimulacaoVinculadaAtual();
+                        if (!simVinculada) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const enriquecida = enriquecerSnapshotCertidaoParaPDF(
+                                {
+                                  ...certidaoData,
+                                  gradeTempo: {
+                                    ...certidaoData.gradeTempo,
+                                    tempoINSSPrivada: {
+                                      ...certidaoData.gradeTempo.tempoINSSPrivada,
+                                      periodoDesc: ''
+                                    }
+                                  }
+                                },
+                                simVinculada
+                              );
+                              const extraido =
+                                (!isGenericInssDescText(enriquecida.gradeTempo.tempoINSSPrivada.periodoDesc)
+                                  ? enriquecida.gradeTempo.tempoINSSPrivada.periodoDesc
+                                  : '') ||
+                                extrairTemposIncorporacoes(simVinculada.incorporacoes, true).inssDesc;
+                              if (extraido && !isGenericInssDescText(extraido)) {
+                                updateGradeItem('tempoINSSPrivada', 'periodoDesc', extraido);
+                                syncInssPeriodoToSim(extraido);
+                                triggerFeedback('Períodos INSS sincronizados com a simulação vinculada!');
+                              } else {
+                                triggerFeedback('Nenhum período com datas ou competências encontrado nas averbações.', true);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-blue-50 text-[#004b8d] border border-blue-200 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                          >
+                            Puxar da Simulação
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const descAtual = certidaoData.gradeTempo.tempoINSSPrivada.periodoDesc || '';
+                    if (isGenericInssDescText(descAtual)) return null;
+                    const itens = descAtual.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+                    if (itens.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5">
+                        {itens.map((pItem, pIdx) => (
+                          <span
+                            key={`${pItem}-${pIdx}`}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white border border-blue-200 text-[#002f5a] rounded text-[11px] font-mono font-semibold"
+                          >
+                            {pItem}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = itens.filter((_, i) => i !== pIdx).join('; ');
+                                updateGradeItem('tempoINSSPrivada', 'periodoDesc', next);
+                                syncInssPeriodoToSim(next);
+                              }}
+                              className="text-gray-400 hover:text-red-600 cursor-pointer font-sans font-bold"
+                              title="Remover período"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   <input
                     type="text"
                     value={certidaoData.gradeTempo.tempoINSSPrivada.periodoDesc || ''}
                     onChange={(e) => updateGradeItem('tempoINSSPrivada', 'periodoDesc', e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    placeholder="Ex: 01/03/1982 a 20/03/1983; 01/07/1983 a 17/07/1984..."
+                    onBlur={(e) => syncInssPeriodoToSim(e.target.value)}
+                    className="w-full p-2 bg-white border border-gray-300 rounded-md font-mono text-xs"
+                    placeholder="Ex: 01/03/1982 a 20/03/1983; 01/07/1983 a 17/07/1984; 11/04/1988 a 27/06/1988"
                   />
                 </div>
               </div>
@@ -3380,7 +3723,9 @@ export default function GeradorCertidao({
                               type="button"
                               onClick={() => {
                                 try {
-                                  gerarCertidaoAposentadoriaPadraoPDF(item.snapshot);
+                                  const simRel = findSimForCert(item);
+                                  const snapEnriquecido = enriquecerSnapshotCertidaoParaPDF(item.snapshot, simRel);
+                                  gerarCertidaoAposentadoriaPadraoPDF(snapEnriquecido);
                                   triggerFeedback(`Certidão (${item.numeroCertidao}) baixada novamente!`);
                                 } catch (e) {
                                   triggerFeedback('Erro ao gerar o PDF da certidão selecionada.', true);
@@ -3395,7 +3740,8 @@ export default function GeradorCertidao({
                             <button
                               type="button"
                               onClick={() => {
-                                setCertidaoData(item.snapshot);
+                                const simRel = findSimForCert(item);
+                                setCertidaoData(refreshGenericInssDesc(JSON.parse(JSON.stringify(item.snapshot)), simRel));
                                 setActiveTab('preview');
                                 triggerFeedback(`Certidão (${item.numeroCertidao}) de ${item.servidorNome} carregada para conferência!`);
                               }}
@@ -3552,7 +3898,9 @@ export default function GeradorCertidao({
                 type="button"
                 onClick={() => {
                   const target = reemissaoTarget;
+                  const simRel = findSimForCert(target);
                   const updated = reemitirCertidaoRegistrada(target, {
+                    sim: simRel,
                     atualizarComSimulacao: false,
                     novaDataHoje: reemissaoNovaDataHoje
                   });

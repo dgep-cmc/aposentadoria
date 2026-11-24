@@ -147,8 +147,8 @@ const decompDias = (totalDias: number) => {
 };
 
 const MESES_PT_MAP: Record<string, number> = {
-  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
-  jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12
+  jan: 1, fev: 2, feb: 2, mar: 3, abr: 4, apr: 4, mai: 5, may: 5, jun: 6,
+  jul: 7, ago: 8, aug: 8, set: 9, sep: 9, out: 10, oct: 10, nov: 11, dez: 12, dec: 12
 };
 
 function parseCompetencyMonthIndex(rawTokenA: string, rawTokenB: string, yearFirst = false): number | null {
@@ -161,7 +161,7 @@ function parseCompetencyMonthIndex(rawTokenA: string, rawTokenB: string, yearFir
     .toLowerCase()
     .trim();
 
-  let mes = MESES_PT_MAP[mesNorm.slice(0, 3)] ?? parseInt(mesNorm, 10);
+  let mes = MESES_PT_MAP[mesNorm.slice(0, 3)] ?? (/^\d+$/.test(mesNorm) ? parseInt(mesNorm, 10) : NaN);
   if (isNaN(mes) || mes < 1 || mes > 12) return null;
 
   let ano = parseInt(anoRaw.trim(), 10);
@@ -182,7 +182,7 @@ function formatCompIndex(idx: number): string {
 
 /**
  * Extrai e agrupa em intervalos contínuos (ex: "01/1998 a 03/2015; 06/2015 a 12/2017")
- * os períodos informados nas linhas da averbação de contribuição.
+ * ou intervalos explícitos (ex: "01/03/1982 a 20/03/1983") os períodos informados na averbação.
  */
 export function extrairPeriodosDeCompetencias(valor?: string): string {
   if (!valor || typeof valor !== 'string') return '';
@@ -195,36 +195,141 @@ export function extrairPeriodosDeCompetencias(valor?: string): string {
   const explicitRanges: string[] = [];
   const compSet = new Set<number>();
 
-  const explicitRangeRegex = /^(\d{2}\/\d{2}\/\d{4})\s*(?:a|até|-)\s*(\d{2}\/\d{2}\/\d{4})$/i;
-  const dateComDiaRegex = /\b(\d{1,2})[\/\-](\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})[\/\-](\d{2}|\d{4})\b/i;
-  const dateSemDiaRegex = /\b(\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})[\/\-](\d{2}|\d{4})\b/i;
-  const dateYearMonthRegex = /\b(\d{4})[\/\-](\d{1,2})\b/;
+  const explicitDateRangeGlobal =
+    /(?<!\d)(\d{1,2}\s*[\/\.\-]\s*\d{1,2}\s*[\/\.\-]\s*(?:\d{2}|\d{4}))\s*(?:a|até|à|-|–)\s*(\d{1,2}\s*[\/\.\-]\s*\d{1,2}\s*[\/\.\-]\s*(?:\d{2}|\d{4}))(?=\D|$)/gi;
+  const explicitMonthRangeGlobal =
+    /(?<!\d)(\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})\s*[\/\.\-]\s*(\d{2}|\d{4})\s*(?:a|até|à|-|–)\s*(\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})\s*[\/\.\-]\s*(\d{2}|\d{4})(?=\D|$)/gi;
 
-  for (const line of lines) {
-    const mExplicit = line.match(explicitRangeRegex);
-    if (mExplicit) {
-      explicitRanges.push(`${mExplicit[1]} a ${mExplicit[2]}`);
-      continue;
+  const dateComDiaGlobal =
+    /(?<!\d)(\d{1,2})\s*[\/\.\-]\s*(\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})\s*[\/\.\-]\s*(\d{2}|\d{4})(?=\D|$)/gi;
+  const dateSemDiaSlashDashGlobal =
+    /(?<!\d)(\d{1,2}|[a-zA-ZçÇãõáéíóúâêô]{3,12})\s*[\/\-]\s*(\d{4}|\d{2}(?!,\d))(?=\D|$)/gi;
+  const dateSemDiaDotGlobal =
+    /\b(0?[1-9]|1[0-2]|[a-zA-ZçÇãõáéíóúâêô]{3,12})\.((?:19|20)\d{2}|\d{2}(?![,\.]\d))(?=\D|$)/gi;
+  const dateMonthSpaceGlobal =
+    /\b([a-zA-ZçÇãõáéíóúâêô]{3,12})\s+(?:de\s+)?((?:19|20)\d{2})(?=\D|$)/gi;
+  const dateYearMonthGlobal =
+    /(?<!\d)((?:19|20)\d{2})\s*[\/\.\-]\s*(0?[1-9]|1[0-2]|[a-zA-ZçÇãõáéíóúâêô]{3,12})(?=\D|$)/gi;
+  const dateYyyymmGlobal =
+    /(?<!\d)((?:19|20)\d{2})(0[1-9]|1[0-2])(?!\d)/g;
+  const dateMmyyyyGlobal =
+    /(?<!\d)(0[1-9]|1[0-2])((?:19|20)\d{2})(?!\d)/g;
+
+  const normalizeBrDate = (raw: string) => {
+    const parts = raw.replace(/\s+/g, '').split(/[\/\.\-]/);
+    if (parts.length !== 3) return raw;
+    const d = parts[0].padStart(2, '0');
+    const m = parts[1].padStart(2, '0');
+    let y = parts[2];
+    if (y.length === 2) {
+      const yn = parseInt(y, 10);
+      y = yn >= 40 ? `19${y}` : `20${y}`;
     }
+    return `${d}/${m}/${y}`;
+  };
 
-    const mComDia = line.match(dateComDiaRegex);
-    if (mComDia) {
-      const idx = parseCompetencyMonthIndex(mComDia[2], mComDia[3], false);
-      if (idx !== null) compSet.add(idx);
-      continue;
-    }
+  for (const rawLine of lines) {
+    let working = rawLine;
 
-    const mSemDia = line.match(dateSemDiaRegex);
-    if (mSemDia) {
-      const idx = parseCompetencyMonthIndex(mSemDia[1], mSemDia[2], false);
-      if (idx !== null) compSet.add(idx);
-      continue;
-    }
+    // 1. Intervalos explícitos DD/MM/AAAA a DD/MM/AAAA (mesmo com texto/valor junto na linha)
+    let matchedAnyExplicit = false;
+    working = working.replace(explicitDateRangeGlobal, (_full, d1: string, d2: string) => {
+      matchedAnyExplicit = true;
+      const rangeStr = `${normalizeBrDate(d1)} a ${normalizeBrDate(d2)}`;
+      if (!explicitRanges.includes(rangeStr)) explicitRanges.push(rangeStr);
+      return ' ';
+    });
 
-    const mYearMonth = line.match(dateYearMonthRegex);
-    if (mYearMonth) {
-      const idx = parseCompetencyMonthIndex(mYearMonth[1], mYearMonth[2], true);
-      if (idx !== null) compSet.add(idx);
+    // 2. Intervalos explícitos MM/AAAA a MM/AAAA
+    working = working.replace(
+      explicitMonthRangeGlobal,
+      (_full, m1: string, y1: string, m2: string, y2: string) => {
+        const idx1 = parseCompetencyMonthIndex(m1, y1, false);
+        const idx2 = parseCompetencyMonthIndex(m2, y2, false);
+        if (idx1 !== null && idx2 !== null) {
+          matchedAnyExplicit = true;
+          const start = Math.min(idx1, idx2);
+          const end = Math.max(idx1, idx2);
+          for (let cur = start; cur <= end; cur++) compSet.add(cur);
+          return ' ';
+        }
+        return _full;
+      }
+    );
+
+    if (matchedAnyExplicit && !working.trim()) continue;
+
+    // 3. Datas completas DD/MM/AAAA, DD.MM.AAAA, DD-MM-AAAA
+    let matchedLine = false;
+    working = working.replace(dateComDiaGlobal, (_full, _d: string, m: string, y: string) => {
+      const idx = parseCompetencyMonthIndex(m, y, false);
+      if (idx !== null) {
+        compSet.add(idx);
+        matchedLine = true;
+        return ' ';
+      }
+      return _full;
+    });
+
+    // 4. Ano/Mês AAAA/MM, AAAA-MM, AAAA.MM
+    working = working.replace(dateYearMonthGlobal, (_full, y: string, m: string) => {
+      const idx = parseCompetencyMonthIndex(y, m, true);
+      if (idx !== null) {
+        compSet.add(idx);
+        matchedLine = true;
+        return ' ';
+      }
+      return _full;
+    });
+
+    // 5. Mês/Ano com barra ou hífen (07/1994, jul/94, 07-1994)
+    working = working.replace(dateSemDiaSlashDashGlobal, (_full, m: string, y: string) => {
+      const idx = parseCompetencyMonthIndex(m, y, false);
+      if (idx !== null) {
+        compSet.add(idx);
+        matchedLine = true;
+        return ' ';
+      }
+      return _full;
+    });
+
+    // 6. Mês.Ano com ponto (07.1994, jul.1994)
+    working = working.replace(dateSemDiaDotGlobal, (_full, m: string, y: string) => {
+      const idx = parseCompetencyMonthIndex(m, y, false);
+      if (idx !== null) {
+        compSet.add(idx);
+        matchedLine = true;
+        return ' ';
+      }
+      return _full;
+    });
+
+    // 7. Mês por extenso + Ano com espaço ("jul 1994", "julho de 1994")
+    working = working.replace(dateMonthSpaceGlobal, (_full, m: string, y: string) => {
+      const idx = parseCompetencyMonthIndex(m, y, false);
+      if (idx !== null) {
+        compSet.add(idx);
+        matchedLine = true;
+        return ' ';
+      }
+      return _full;
+    });
+
+    // 8. Formatos compactos AAAAMM (ex: 199407) ou MMAAAA (ex: 071994) se ainda não casou nada
+    if (!matchedLine) {
+      for (const m of working.matchAll(dateYyyymmGlobal)) {
+        const idx = parseCompetencyMonthIndex(m[1], m[2], true);
+        if (idx !== null) {
+          compSet.add(idx);
+          matchedLine = true;
+        }
+      }
+      if (!matchedLine) {
+        for (const m of working.matchAll(dateMmyyyyGlobal)) {
+          const idx = parseCompetencyMonthIndex(m[1], m[2], false);
+          if (idx !== null) compSet.add(idx);
+        }
+      }
     }
   }
 
@@ -254,7 +359,7 @@ export function extrairPeriodosDeCompetencias(valor?: string): string {
     );
   }
 
-  return parts.join('; ');
+  return Array.from(new Set(parts)).join('; ');
 }
 
 export function extrairTemposIncorporacoes(
@@ -311,14 +416,24 @@ export function extrairTemposIncorporacoes(
     if (isINSS) {
       diasINSSIncs += dias;
       if (dias > 0) {
-        const nomeLimpo = (inc.nome || '').trim();
+        const rawNome = (inc.nome || '').trim();
+        const nomeLimpo = /^per[ií]odo de incorpora[cç][aã]o\s*#?\d*$/i.test(rawNome) ? '' : rawNome;
         const hasDates = Boolean(inc.dataInicio && inc.dataFim);
         const periodoPorDatas = hasDates ? `${formatBR(inc.dataInicio)} a ${formatBR(inc.dataFim)}` : '';
         const periodoTempoManual = (inc.periodoDescricao || '').trim();
-        const periodoContagem = inc.useDates
-          ? periodoPorDatas || periodoTempoManual
-          : periodoTempoManual || periodoPorDatas;
         const periodoPorCompetencias = extrairPeriodosDeCompetencias(inc.valor);
+
+        let periodoContagem = '';
+        if (inc.useDates) {
+          if (periodoTempoManual && periodoPorDatas && !periodoTempoManual.includes(periodoPorDatas)) {
+            periodoContagem = `${periodoPorDatas}; ${periodoTempoManual}`;
+          } else {
+            periodoContagem = periodoTempoManual || periodoPorDatas;
+          }
+        } else {
+          periodoContagem = periodoTempoManual || periodoPorDatas;
+        }
+
         const periodoFinal = periodoContagem || periodoPorCompetencias;
 
         if (nomeLimpo && periodoFinal) {
@@ -330,7 +445,7 @@ export function extrairTemposIncorporacoes(
         } else if (periodoFinal) {
           inssDescs.push(periodoFinal);
         } else if (nomeLimpo) {
-          inssDescs.push(nomeLimpo);
+          inssDescs.push(`${nomeLimpo} (${formatarYMD(dias)})`);
         } else if (t === 'contribution-only') {
           inssDescs.push(`Tempo e contribuição pós-07/1994 (${formatarYMD(dias)})`);
         } else if (t === 'pre-1994') {
@@ -366,7 +481,61 @@ export function extrairTemposIncorporacoes(
     diasOutrasCLT,
     diasPenalidades,
     diasINSSIncs,
-    inssDesc: inssDescs.join('; ')
+    inssDesc: Array.from(new Set(inssDescs.map(s => s.trim()).filter(Boolean))).join('; ')
+  };
+}
+
+export function isGenericInssDescText(desc?: string): boolean {
+  const t = (desc || '').trim();
+  return (
+    !t ||
+    t.startsWith('Tempo e contribuição pós-07/1994 (') ||
+    t.startsWith('Apenas tempo pré-07/1994 (') ||
+    t.startsWith('CTC/INSS averbada (') ||
+    t === 'Certidão de Tempo de Contribuição CTC/INSS averbada'
+  );
+}
+
+export function enriquecerSnapshotCertidaoParaPDF(
+  cert: CertidaoData,
+  simRel?: UnifiedSimulation | null
+): CertidaoData {
+  const currentDesc = cert.gradeTempo?.tempoINSSPrivada?.periodoDesc || '';
+  if (!simRel || !isGenericInssDescText(currentDesc)) return cert;
+
+  const includeSim = Boolean(cert.isSimulacao);
+  let extracted = extrairTemposIncorporacoes(simRel.incorporacoes, includeSim);
+  if (
+    !includeSim &&
+    isGenericInssDescText(extracted.inssDesc) &&
+    cert.gradeTempo?.tempoINSSPrivada?.totalDias > 0
+  ) {
+    const withSim = extrairTemposIncorporacoes(simRel.incorporacoes, true);
+    const totalInssCert = cert.gradeTempo.tempoINSSPrivada.totalDias;
+    const totalComAverb = (simRel.diasAverbadosINSS || 0) + withSim.diasINSSIncs;
+    if (
+      !isGenericInssDescText(withSim.inssDesc) &&
+      (Math.abs(withSim.diasINSSIncs - totalInssCert) <= 30 ||
+        Math.abs(totalComAverb - totalInssCert) <= 30 ||
+        extracted.diasINSSIncs === 0)
+    ) {
+      extracted = withSim;
+    }
+  }
+
+  if (!extracted.inssDesc || isGenericInssDescText(extracted.inssDesc) || extracted.inssDesc === currentDesc) {
+    return cert;
+  }
+
+  return {
+    ...cert,
+    gradeTempo: {
+      ...cert.gradeTempo,
+      tempoINSSPrivada: {
+        ...cert.gradeTempo.tempoINSSPrivada,
+        periodoDesc: extracted.inssDesc
+      }
+    }
   };
 }
 
@@ -840,7 +1009,7 @@ export function emitirCertidaoAbonoOficial(sim: UnifiedSimulation, emitidoPor?: 
 export function reemitirCertidaoRegistrada(
   certOriginal: CertidaoEmitida,
   options?: {
-    sim?: UnifiedSimulation;
+    sim?: UnifiedSimulation | null;
     atualizarComSimulacao?: boolean;
     snapshotCustomizado?: CertidaoData;
     novaDataHoje?: boolean;
@@ -906,7 +1075,11 @@ export function reemitirCertidaoRegistrada(
     };
   }
 
-  const updated = reemitirCertidaoNoRegistro(certOriginal.id, snapshotFinal);
-  gerarCertidaoAposentadoriaPadraoPDF(updated ? updated.snapshot : snapshotFinal);
+  const finalEnriquecido = options?.sim
+    ? enriquecerSnapshotCertidaoParaPDF(snapshotFinal, options.sim)
+    : snapshotFinal;
+
+  const updated = reemitirCertidaoNoRegistro(certOriginal.id, finalEnriquecido);
+  gerarCertidaoAposentadoriaPadraoPDF(updated ? updated.snapshot : finalEnriquecido);
   return updated;
 }
